@@ -164,7 +164,7 @@ Los demás valores tienen defaults sensatos en `bot_.env.example`.
 
 ## Ejecución
 
-### Windows (recomendado)
+### Windows
 
 ```powershell
 .\chatbot.ps1                # instala lo que falte + arranca
@@ -173,11 +173,22 @@ Los demás valores tienen defaults sensatos en `bot_.env.example`.
 .\chatbot.ps1 -Verificar     # solo verifica el estado
 ```
 
-El script hace en un solo comando: verificar Python/PostgreSQL, crear
-`venv`, instalar dependencias, crear `.env`, crear la base de datos,
-abrir el firewall solo a la LAN y arrancar el bot.
+### Linux (Ubuntu / Debian)
 
-### Multi-plataforma (después de instalar manualmente)
+```bash
+./chatbot.sh                 # instala lo que falte + arranca
+./chatbot.sh --solo-instalar # solo instala, no arranca
+./chatbot.sh --solo-arrancar # arranca (uso diario)
+./chatbot.sh --verificar     # solo verifica el estado
+```
+
+Ambos scripts hacen en un solo comando: verificar Python/PostgreSQL,
+crear `venv`, instalar dependencias, crear `.env`, crear la base de
+datos, abrir el firewall solo a la LAN y arrancar el bot.
+
+### Alternativa manual (multi-plataforma)
+
+Si prefieres ejecutar directo (después de instalar `venv` y `.env`):
 
 ```bash
 python bot_main.py
@@ -247,7 +258,7 @@ chatbot-whatsapp-hospital/
 │   ├── bot_requirements.txt      # Dependencias Python
 │   ├── bot_.env.example          # Plantilla de .env
 │   ├── chatbot.ps1               # Script definitivo Windows (instala + arranca)
-│   ├── install_chatbot.sh        # Instalador para Linux / Git Bash
+│   ├── chatbot.sh                # Script definitivo Linux (instala + arranca)
 │   ├── stop_bot.sh               # Detener el bot en Linux
 │   ├── Dockerfile.chatbot        # Imagen Docker
 │   └── docker-compose.chatbot.yml
@@ -257,8 +268,9 @@ chatbot-whatsapp-hospital/
 │
 └── Documentación
     ├── README.md                 # Este archivo (instalación)
-    ├── HISTORIAL.md              # Historia y desarrollo del proyecto
-    └── IMPLEMENTACION_HOSPITAL.md # Guía paso a paso para el hospital
+    ├── HISTORIAL.md               # Historia y desarrollo del proyecto
+    ├── IMPLEMENTACION_HOSPITAL.md # Guía paso a paso para Windows
+    └── IMPLEMENTACION_LINUX.md    # Guía paso a paso para Ubuntu / Linux
 ```
 
 ---
@@ -271,9 +283,13 @@ chatbot-whatsapp-hospital/
   decisiones técnicas tomadas.
 
 - **[IMPLEMENTACION_HOSPITAL.md](IMPLEMENTACION_HOSPITAL.md)** — Guía paso
-  a paso, en lenguaje sencillo, para desplegar el chatbot en la red
-  interna del hospital. Pensada para personal técnico sin experiencia
-  previa con el sistema.
+  a paso para desplegar el chatbot **en Windows** (piloto). Pensada
+  para personal técnico sin experiencia previa con el sistema.
+
+- **[IMPLEMENTACION_LINUX.md](IMPLEMENTACION_LINUX.md)** — Guía paso a
+  paso para desplegar el chatbot **en un servidor Ubuntu** de la
+  intranet del hospital. Incluye configuración de systemd para arranque
+  automático en producción.
 
 ---
 
