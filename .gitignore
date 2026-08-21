@@ -1,0 +1,53 @@
+# ─────────────────────────────────────────────────────────────
+#  ChatBot WhatsApp - Hospital  ·  .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# ── Configuración SENSIBLE (¡nunca subir credenciales!) ──────
+# Contiene tokens de WhatsApp, API keys de IA, contraseñas de BD, etc.
+.env
+.env.*
+*.env
+# ...pero sí conservamos la plantilla de ejemplo (sin secretos):
+!bot_.env.example
+
+# ── Entornos virtuales de Python ─────────────────────────────
+venv/
+env/
+.venv/
+ENV/
+
+# ── Cache y compilados de Python ─────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ── Node / Tailwind ──────────────────────────────────────────
+node_modules/
+npm-debug.log*
+
+# ── Documentos subidos por pacientes (órdenes/autorizaciones) ─
+# Son datos personales: no deben ir al repositorio.
+static/documentos/*
+!static/documentos/.gitkeep
+
+# ── Logs y temporales ────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+
+# ── Sistema operativo ────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editores / IDE ───────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*~
+
+# ── Claude Code (configuración local de la sesión) ───────────
+.claude/settings.local.json

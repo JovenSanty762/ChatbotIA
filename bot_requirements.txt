@@ -1,0 +1,47 @@
+# Dependencias del ChatBot WhatsApp
+# Python 3.10+
+
+# Framework Web
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Base de Datos
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+
+# Configuración
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# HTTP Requests
+requests==2.32.2
+
+# Ngrok
+pyngrok==7.0.5
+
+# Inteligencia Artificial — instala solo el proveedor que uses
+anthropic>=0.40.0          # Claude  (AI_PROVIDER=claude)
+google-genai>=1.0.0        # Gemini  (visión OCR + texto) — SDK nuevo
+groq>=0.9.0                # Groq    (AI_PROVIDER=groq)
+
+# Procesamiento de imágenes (ligero, sin torch)
+Pillow>=10.0.0
+
+# Lectura de PDF (recortar a la primera página para el OCR)
+pypdf>=4.0.0
+
+# Rasterizar PDF a imagen (necesario para el OCR local con Ollama)
+pymupdf>=1.24.0
+
+# OCR local sin límite (opcional): requiere instalar Ollama aparte (https://ollama.com)
+# y descargar un modelo de visión, p. ej.:  ollama pull llama3.2-vision
+# Se activa con OCR_PROVIDER=ollama en el .env. No necesita paquete pip adicional
+# (se llama por HTTP a http://localhost:11434 con la librería 'requests' ya incluida).
+
+# Lectura de Excel (.xlsx) — carga de horarios semanales desde el panel
+openpyxl>=3.1.0
+
+# Utilidades
+python-dateutil==2.8.2

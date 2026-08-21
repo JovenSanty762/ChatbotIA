@@ -1,0 +1,51 @@
+# Dockerfile para ChatBot WhatsApp
+FROM python:3.11-slim
+
+# Metadata
+LABEL maintainer="hospital@example.com"
+LABEL description="ChatBot WhatsApp - Sistema de Agendamiento"
+LABEL version="2.0.0"
+
+# Variables de entorno
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Crear directorio de trabajo
+WORKDIR /app
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements
+COPY bot_requirements.txt .
+
+# Instalar dependencias Python
+RUN pip install --upgrade pip && \
+    pip install -r bot_requirements.txt
+
+# Copiar código de la aplicación
+COPY bot_*.py .
+COPY sql_db.sql .
+
+# Crear usuario no-root
+RUN useradd -m -u 1000 chatbot && \
+    chown -R chatbot:chatbot /app
+
+USER chatbot
+
+# Exponer puerto
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Descargar modelo de spaCy en español
+RUN python -m spacy download es_core_news_md
+
+# Comando de inicio
+CMD ["python", "bot_main.py"]
