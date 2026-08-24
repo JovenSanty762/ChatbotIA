@@ -252,7 +252,7 @@ GROQ_AUTH_TOKEN=xxx
 AI_PROVIDER=groq
 
 # Hospital
-HOSPITAL_NOMBRE=Hospital Civil de Ipiales
+HOSPITAL_NOMBRE=Hospital Civil de Ipiales E.S.E.
 HOSPITAL_TELEFONO=6027374008 o 6027332149
 ```
 
