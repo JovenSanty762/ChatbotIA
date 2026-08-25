@@ -1,51 +1,52 @@
-# Dockerfile para ChatBot WhatsApp
+# Dockerfile para ChatBot WhatsApp - Hospital Civil de Ipiales
+# Vía ALTERNATIVA al despliegue directo en el host (chatbot.sh + systemd).
+# Uso: docker compose -f docker-compose.chatbot.yml up -d --build
 FROM python:3.11-slim
 
-# Metadata
 LABEL maintainer="hospital@example.com"
-LABEL description="ChatBot WhatsApp - Sistema de Agendamiento"
+LABEL description="ChatBot WhatsApp - Sistema de Agendamiento del Hospital"
 LABEL version="2.0.0"
 
-# Variables de entorno
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    TZ=America/Bogota \
+    LANG=C.UTF-8
 
-# Crear directorio de trabajo
 WORKDIR /app
 
-# Instalar dependencias del sistema
-RUN apt-get update && apt-get install -y \
-    postgresql-client \
-    curl \
+# Dependencias del sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        postgresql-client \
+        curl \
+        tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements
-COPY bot_requirements.txt .
-
 # Instalar dependencias Python
+COPY bot_requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r bot_requirements.txt
 
-# Copiar código de la aplicación
-COPY bot_*.py .
-COPY sql_db.sql .
+# Copiar TODO el código del proyecto (módulos + panel estático + SQL + datos de referencia)
+COPY bot_main.py bot_handler.py bot_config.py bot_models.py bot_requirements.txt ./
+COPY admin_router.py auth_admin.py database.py ai_processor.py ocr_processor.py \
+     cups_referencia.py intent_detector.py limpieza_documentos.py reset_sistema.py ./
+COPY sql_db.sql cups_codigos.txt ./
+COPY static/ ./static/
 
-# Crear usuario no-root
+# Directorios de datos (persistentes vía volumen en docker-compose)
+RUN mkdir -p /app/logs /app/static/documentos
+
+# Usuario no-root
 RUN useradd -m -u 1000 chatbot && \
     chown -R chatbot:chatbot /app
 
 USER chatbot
 
-# Exponer puerto
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -fsS http://localhost:8000/health || exit 1
 
-# Descargar modelo de spaCy en español
-RUN python -m spacy download es_core_news_md
-
-# Comando de inicio
 CMD ["python", "bot_main.py"]

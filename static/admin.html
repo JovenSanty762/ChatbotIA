@@ -1,0 +1,2581 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel Administrativo – Hospital</title>
+  <link rel="stylesheet" href="/static/tailwind.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+    /* ── Sidebar nav ── */
+    .nav-item { display:flex; align-items:center; gap:9px; padding:9px 14px; border-radius:8px; cursor:pointer; color:#94a3b8; font-size:14px; font-weight:500; transition:all .15s; white-space:nowrap; }
+    .nav-item:hover { background:rgba(255,255,255,.07); color:#e2e8f0; }
+    .nav-item.active { background:#2563eb; color:white; }
+    .nav-section { font-size:11px; color:#475569; padding:12px 14px 4px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; }
+
+    /* Badge de "citas pendientes" en el ítem del sidebar. Pulsa suavemente
+       para llamar la atención sin ser invasivo. Se oculta cuando el contador
+       es 0. */
+    .nav-badge {
+      margin-left:auto; background:#dc2626; color:white; font-size:11px;
+      font-weight:700; padding:1px 8px; border-radius:999px; min-width:20px;
+      text-align:center; box-shadow:0 0 0 0 rgba(220,38,38,.7);
+    }
+    .nav-badge.new { animation: nav-pulse 1.6s ease-out 3; }
+    .nav-badge.hidden { display:none; }
+    aside#sidebar.collapsed .nav-badge {
+      position:absolute; top:6px; right:8px; margin:0;
+      font-size:10px; padding:0 5px; min-width:16px;
+    }
+    aside#sidebar.collapsed .nav-item { position:relative; }
+    @keyframes nav-pulse {
+      0%   { box-shadow:0 0 0 0 rgba(220,38,38,.55); }
+      70%  { box-shadow:0 0 0 8px rgba(220,38,38,0); }
+      100% { box-shadow:0 0 0 0 rgba(220,38,38,0); }
+    }
+
+    /* ── Badges ── */
+    .badge { display:inline-flex; align-items:center; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+    .badge-pendiente   { background:#fef9c3; color:#854d0e; }
+    .badge-agendada    { background:#dcfce7; color:#166534; }
+    .badge-cancelada   { background:#fee2e2; color:#991b1b; }
+    .badge-completada  { background:#e0f2fe; color:#0369a1; }
+    .badge-inasistida  { background:#ffedd5; color:#c2410c; }
+    .badge-activo      { background:#dcfce7; color:#166534; }
+    .badge-inactivo    { background:#f1f5f9; color:#64748b; }
+
+    /* ── Tables ── */
+    table { width:100%; border-collapse:collapse; }
+    thead th {
+      background:#f8fafc; text-align:left; padding:10px 12px; font-size:11px;
+      font-weight:700; color:#64748b; border-bottom:2px solid #e2e8f0;
+      text-transform:uppercase; letter-spacing:.05em; white-space:nowrap;
+    }
+    thead th.th-sort { cursor:pointer; user-select:none; }
+    thead th.th-sort:hover { background:#eef2ff; color:#3b82f6; }
+    .sort-icon { font-size:9px; color:#94a3b8; margin-left:3px; transition:color .15s; }
+    thead th.th-sort:hover .sort-icon { color:#3b82f6; }
+
+    /* Filter row */
+    .filter-row td { padding:3px 5px; background:#f0f4ff; border-bottom:1px solid #dbeafe; }
+    .fi {
+      width:100%; padding:4px 7px; border:1px solid #dde3ed; border-radius:5px;
+      font-size:11px; color:#374151; background:white; outline:none;
+    }
+    .fi:focus { border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,.15); }
+    .fi-sel { width:100%; padding:3px 5px; border:1px solid #dde3ed; border-radius:5px; font-size:11px; background:white; }
+
+    tbody td { padding:9px 12px; border-bottom:1px solid #f1f5f9; font-size:13.5px; color:#1e293b; vertical-align:middle; }
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr:hover td { background:#fafcff; }
+
+    /* ── Buttons ── */
+    .btn { display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; border:none; transition:all .15s; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-primary  { background:#2563eb; color:white; }
+    .btn-primary:hover:not(:disabled)  { background:#1d4ed8; }
+    .btn-secondary{ background:#f1f5f9; color:#475569; }
+    .btn-secondary:hover:not(:disabled){ background:#e2e8f0; }
+    .btn-danger   { background:#fee2e2; color:#dc2626; }
+    .btn-danger:hover:not(:disabled)   { background:#fecaca; }
+    .btn-success  { background:#dcfce7; color:#16a34a; }
+    .btn-success:hover:not(:disabled)  { background:#bbf7d0; }
+    .btn-warning  { background:#fef9c3; color:#b45309; }
+    .btn-warning:hover:not(:disabled)  { background:#fef08a; }
+    .btn-sm { padding:4px 10px; font-size:12px; }
+
+    /* ── Cards ── */
+    .card { background:white; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+    /* Fila de tarjetas de estadística: botones pequeños que se reparten el ancho
+       y se envuelven (no depende de las clases grid de Tailwind). */
+    .stat-row { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:1.5rem; }
+    .stat-card { flex:1 1 150px; min-width:140px; background:white; border-radius:10px;
+      padding:13px 16px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+    .stat-value { font-size:26px; font-weight:700; line-height:1; }
+    .stat-label { font-size:12.5px; color:#64748b; margin-top:4px; white-space:nowrap; }
+
+    /* ── Form controls ── */
+    .form-group { margin-bottom:14px; }
+    .form-group label { display:block; font-size:13px; font-weight:500; color:#374151; margin-bottom:5px; }
+    input[type=text],input[type=email],input[type=date],input[type=time],input[type=number],select,textarea {
+      display:block; width:100%; padding:8px 12px; border:1.5px solid #e2e8f0;
+      border-radius:8px; font-size:14px; color:#1e293b; background:white;
+      outline:none; transition:border-color .15s,box-shadow .15s;
+    }
+    input:focus,select:focus,textarea:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.12); }
+
+    /* ── Toggle ── */
+    .toggle { position:relative; display:inline-block; width:38px; height:21px; flex-shrink:0; }
+    .toggle input { opacity:0; width:0; height:0; }
+    .toggle-track { position:absolute; cursor:pointer; inset:0; background:#cbd5e1; border-radius:21px; transition:.25s; }
+    .toggle-track:before { content:""; position:absolute; height:15px; width:15px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.25s; }
+    input:checked+.toggle-track { background:#22c55e; }
+    input:checked+.toggle-track:before { transform:translateX(17px); }
+
+    /* ── Misc ── */
+    ::-webkit-scrollbar { width:6px; height:6px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+    .counter-badge { background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600; }
+
+    /* ── Sidebar colapsable ── */
+    /* Con Tailwind compilado (CSS plano) la cascada y las transiciones vuelven
+       a funcionar con normalidad. min-width:0 + overflow:hidden permiten que el
+       ancho se reduzca sin que el contenido lo fuerce. */
+    /* En un flex item las transiciones CSS de width/max-width se atascan, así
+       que el ancho se anima por JS (requestAnimationFrame). El botón sí se anima
+       con CSS porque sus <span> no son flex items. */
+    aside#sidebar { width:14rem; max-width:14rem; min-width:0; overflow:hidden; }
+    aside#sidebar.collapsed { width:4.5rem; max-width:4.5rem; }
+    aside#sidebar.collapsed .nav-label,
+    aside#sidebar.collapsed .nav-section,
+    aside#sidebar.collapsed .side-text,
+    aside#sidebar.collapsed .side-footer { display:none; }
+    aside#sidebar.collapsed .nav-item { justify-content:center; padding-left:0; padding-right:0; gap:0; }
+    aside#sidebar.collapsed .brand-row { justify-content:center; }
+    .nav-ico { font-size:16px; width:20px; text-align:center; flex-shrink:0; }
+
+    /* ── Botón hamburguesa animado ── */
+    .hamburger { width:30px; height:26px; display:flex; flex-direction:column; justify-content:center;
+      align-items:center; gap:6px; background:none; border:none; cursor:pointer; padding:0; }
+    .hamburger span { display:block; width:22px; height:2.5px; border-radius:3px; background:#94a3b8;
+      transform-origin:center; }
+    .hamburger:hover span { background:#e2e8f0; }
+    /* El estado (X expandido / ☰ contraído) lo fija JS por estilo inline; la
+       transición de los <span> (que no son flex items) anima el cambio. */
+
+    /* ── Acordeón de horarios ── */
+    .is-hidden { display:none !important; }
+    .hor-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; cursor:pointer; }
+    .hor-head:hover { background:#f8fafc; }
+    .hor-caret { display:inline-block; transition:transform .15s; color:#94a3b8; font-size:11px; }
+    .hor-caret.open { transform:rotate(90deg); color:#3b82f6; }
+    .hor-summary { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; flex:1; max-width:720px; }
+    .hor-col-h { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
+    .hor-chips { display:flex; flex-wrap:wrap; gap:5px; }
+    .hor-chip { background:#eef2ff; color:#3730a3; border-radius:999px; padding:2px 10px; font-size:12px; white-space:nowrap; }
+    .esp-chip { background:#f1f5f9; color:#475569; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; white-space:nowrap; }
+    .hor-detail { border-top:1px solid #f1f5f9; background:#fcfdff; }
+
+    /* ── Animaciones (suaves y tranquilas) ── */
+    @keyframes app-fade-up   { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+    @keyframes app-slide-left{ from { opacity:0; transform:translateX(-18px); } to { opacity:1; transform:none; } }
+    @keyframes app-pop       { from { opacity:0; transform:scale(.96); }       to { opacity:1; transform:scale(1); } }
+    @keyframes app-fade      { from { opacity:0; }                              to { opacity:1; } }
+
+    /* curva de easing agradable */
+    :root { --ease-calm: cubic-bezier(.22,.61,.36,1); }
+
+    /* Apertura de la página */
+    aside#sidebar { animation: app-slide-left .5s var(--ease-calm) both; }
+    main          { animation: app-fade .5s ease both; }
+
+    /* Entrada escalonada de las tarjetas de estadística del dashboard */
+    .stat-card { animation: app-fade-up .5s var(--ease-calm) both; }
+    #sec-dashboard .stat-card:nth-child(1){ animation-delay:.05s; }
+    #sec-dashboard .stat-card:nth-child(2){ animation-delay:.10s; }
+    #sec-dashboard .stat-card:nth-child(3){ animation-delay:.15s; }
+    #sec-dashboard .stat-card:nth-child(4){ animation-delay:.20s; }
+    #sec-dashboard .stat-card:nth-child(5){ animation-delay:.25s; }
+
+    /* Modales y confirmaciones aparecen con un "pop" suave */
+    #modal-overlay   > div { animation: app-pop .24s var(--ease-calm); }
+    #confirm-overlay > div { animation: app-pop .24s var(--ease-calm); }
+    #modal-overlay, #confirm-overlay { animation: app-fade .2s ease; }
+
+    /* Detalle del acordeón de horarios al expandir */
+    .hor-detail:not(.is-hidden) { animation: app-fade-up .3s var(--ease-calm); }
+
+    /* Avisos (toasts) entran deslizándose suavemente */
+    #toasts > div { animation: app-slide-left .28s var(--ease-calm); }
+
+    /* Suavizado general de elementos interactivos */
+    .card { transition: box-shadow .25s ease, transform .25s ease; }
+    .card:hover { box-shadow:0 4px 16px rgba(0,0,0,.08); }
+    .btn { transition: background .15s ease, color .15s ease, transform .12s ease, box-shadow .15s ease; }
+    .btn:active:not(:disabled) { transform: scale(.97); }
+    tbody tr { transition: background .15s ease; }
+
+    /* Accesibilidad: respetar a quien prefiere menos movimiento */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration:.001ms !important; animation-iteration-count:1 !important;
+        transition-duration:.001ms !important; scroll-behavior:auto !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-slate-100 flex h-screen overflow-hidden">
+
+<!-- ═══════════════════════ SIDEBAR ═══════════════════════════════════════ -->
+<aside id="sidebar" class="bg-slate-900 flex-shrink-0 flex flex-col h-full">
+  <div class="px-4 py-5 border-b border-slate-800 flex items-center justify-between brand-row">
+    <div class="side-text">
+      <div class="text-white font-bold text-lg leading-tight">🏥 Hospital</div>
+      <div class="text-slate-500 text-xs mt-1">Panel Administrativo</div>
+    </div>
+    <button onclick="toggleSidebar()" id="side-toggle" class="hamburger flex-shrink-0"
+            title="Contraer / expandir menú" aria-label="Contraer o expandir el menú">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <nav class="flex-1 py-3 px-2 overflow-y-auto space-y-0.5">
+    <div class="nav-section">General</div>
+    <div class="nav-item" data-section="dashboard"      title="Dashboard"          onclick="go('dashboard')"><span class="nav-ico">📊</span><span class="nav-label">Dashboard</span></div>
+    <div class="nav-item" data-section="citas"          title="Citas Médicas"      onclick="go('citas')"><span class="nav-ico">📅</span><span class="nav-label">Citas Médicas</span><span id="nav-badge-pendientes" class="nav-badge hidden" title="Citas pendientes de confirmar">0</span></div>
+    <div class="nav-item" data-section="historico"      title="Histórico de Citas" onclick="go('historico')"><span class="nav-ico">📜</span><span class="nav-label">Histórico de Citas</span></div>
+    <div class="nav-item" data-section="metricas"       title="Métricas"           onclick="go('metricas')"><span class="nav-ico">📈</span><span class="nav-label">Métricas</span></div>
+    <div class="nav-section">Gestión</div>
+    <div class="nav-item" data-section="medicos"        title="Médicos"            onclick="go('medicos')"><span class="nav-ico">👨‍⚕️</span><span class="nav-label">Médicos</span></div>
+    <div class="nav-item" data-section="pacientes"      title="Pacientes"          onclick="go('pacientes')"><span class="nav-ico">👥</span><span class="nav-label">Pacientes</span></div>
+    <div class="nav-item" data-section="especialidades" title="Especialidades"     onclick="go('especialidades')"><span class="nav-ico">🏥</span><span class="nav-label">Especialidades</span></div>
+    <div class="nav-item" data-section="eps"            title="EPS"                onclick="go('eps')"><span class="nav-ico">🩺</span><span class="nav-label">EPS</span></div>
+    <div class="nav-section">Disponibilidad</div>
+    <div class="nav-item" data-section="fechas"         title="Fechas"             onclick="go('fechas')"><span class="nav-ico">📆</span><span class="nav-label">Fechas</span></div>
+    <div class="nav-item" data-section="horarios"       title="Horarios"           onclick="go('horarios')"><span class="nav-ico">🕐</span><span class="nav-label">Horarios</span></div>
+    <div class="nav-section">Sistema</div>
+    <div class="nav-item" data-section="sistema"        title="Sistema"            onclick="go('sistema')"><span class="nav-ico">⚙️</span><span class="nav-label">Sistema</span></div>
+    <div class="nav-item" title="Cerrar sesión" onclick="doLogout()"><span class="nav-ico">🚪</span><span class="nav-label">Cerrar sesión</span></div>
+  </nav>
+  <div class="px-4 py-3 border-t border-slate-800 text-xs text-slate-600 side-footer">ChatBot WhatsApp v2.0</div>
+</aside>
+
+<!-- ═══════════════════════ MAIN ══════════════════════════════════════════ -->
+<main class="flex-1 overflow-auto">
+
+<!-- ── DASHBOARD ─────────────────────────────────────────────────────────── -->
+<section id="sec-dashboard" class="sec p-7">
+  <h1 class="text-2xl font-bold text-slate-800 mb-6">Dashboard</h1>
+  <div class="stat-row">
+    <div class="stat-card" style="cursor:pointer" onclick="go('citas');setTimeout(()=>{$('cf-estado').value='pendiente';loadCitas();},120)" title="Ver citas pendientes de confirmar">
+      <div id="d-pendientes" class="stat-value" style="color:#d97706">—</div><div class="stat-label">⏳ Por confirmar</div></div>
+    <div class="stat-card"><div id="d-pacientes" class="stat-value" style="color:#2563eb">—</div><div class="stat-label">Pacientes</div></div>
+    <div class="stat-card"><div id="d-hoy"       class="stat-value" style="color:#16a34a">—</div><div class="stat-label">Citas Hoy</div></div>
+    <div class="stat-card"><div id="d-mes"       class="stat-value" style="color:#4f46e5">—</div><div class="stat-label">Citas este Mes</div></div>
+    <div class="stat-card"><div id="d-medicos"   class="stat-value" style="color:#9333ea">—</div><div class="stat-label">Médicos Activos</div></div>
+    <div class="stat-card"><div id="d-esps"      class="stat-value" style="color:#f97316">—</div><div class="stat-label">Especialidades Activas</div></div>
+    <div class="stat-card" style="cursor:pointer" onclick="go('metricas')" title="Ver métricas de satisfacción">
+      <div id="d-estrellas" class="stat-value" style="color:#f59e0b">—</div><div class="stat-label">⭐ Satisfacción</div></div>
+    <div class="stat-card" style="cursor:pointer" onclick="go('metricas')" title="Ver tiempos de agendamiento">
+      <div id="d-tiempo"    class="stat-value" style="color:#0891b2">—</div><div class="stat-label">⏱️ Tiempo agendamiento</div></div>
+    <div class="stat-card" style="cursor:pointer" onclick="go('metricas')" title="Ver tiempos de confirmación">
+      <div id="d-confirmacion" class="stat-value" style="color:#8b5cf6">—</div><div class="stat-label">⏱️ Confirmación prom.</div></div>
+  </div>
+  <div class="card p-5">
+    <h3 class="font-semibold text-slate-700 mb-1">Resumen de citas medicas</h3>
+    <p class="text-xs text-slate-400 mb-4">Prioridad: agendadas → inasistidas → completadas.</p>
+    <div class="overflow-x-auto"><div id="d-recientes"></div></div>
+  </div>
+</section>
+
+<!-- ── CITAS ─────────────────────────────────────────────────────────────── -->
+<section id="sec-citas" class="sec hidden p-7">
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-2xl font-bold text-slate-800">Citas Médicas</h1>
+    <span id="citas-counter" class="counter-badge"></span>
+  </div>
+  <!-- Server-side filters -->
+  <div class="card p-4 mb-4">
+    <div class="grid grid-cols-5 gap-3">
+      <div class="form-group mb-0"><label>Estado</label>
+        <select id="cf-estado" onchange="loadCitas()">
+          <option value="">Todas</option>
+          <option value="pendiente">⏳ Pendientes</option>
+          <option value="agendada">Agendadas</option>
+          <option value="completada">Completadas</option>
+          <option value="inasistida">Inasistidas</option>
+          <option value="cancelada">Canceladas</option>
+        </select></div>
+      <div class="form-group mb-0"><label>Desde</label><input type="date" id="cf-desde" onchange="loadCitas()"></div>
+      <div class="form-group mb-0"><label>Hasta</label><input type="date" id="cf-hasta" onchange="loadCitas()"></div>
+      <div class="form-group mb-0"><label>Especialidad</label><select id="cf-esp" onchange="loadCitas()"><option value="">Todas</option></select></div>
+      <div class="form-group mb-0"><label>Paciente</label><input type="text" id="cf-buscar" placeholder="Nombre o cédula…" oninput="debouncedCitas()"></div>
+    </div>
+  </div>
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table>
+        <thead>
+          <tr>
+            <th class="th-sort" onclick="srt('citas','id')">#<span class="sort-icon si" data-t="citas" data-c="id">▲</span></th>
+            <th class="th-sort" onclick="srt('citas','paciente')">Paciente<span class="sort-icon si" data-t="citas" data-c="paciente">⬍</span></th>
+            <th class="th-sort" onclick="srt('citas','cedula')">Cédula<span class="sort-icon si" data-t="citas" data-c="cedula">⬍</span></th>
+            <th class="th-sort" onclick="srt('citas','especialidad')">Especialidad<span class="sort-icon si" data-t="citas" data-c="especialidad">⬍</span></th>
+            <th class="th-sort" onclick="srt('citas','medico')">Médico<span class="sort-icon si" data-t="citas" data-c="medico">⬍</span></th>
+            <th class="th-sort" onclick="srt('citas','fecha')">Fecha<span class="sort-icon si" data-t="citas" data-c="fecha">⬍</span></th>
+            <th class="th-sort" onclick="srt('citas','hora')">Hora<span class="sort-icon si" data-t="citas" data-c="hora">⬍</span></th>
+            <th class="th-sort" onclick="srt('citas','turno')">Turno<span class="sort-icon si" data-t="citas" data-c="turno">⬍</span></th>
+            <th class="th-sort" onclick="srt('citas','estado')">Estado<span class="sort-icon si" data-t="citas" data-c="estado">⬍</span></th>
+            <th class="th-sort" onclick="srt('citas','asistencia_label')">Asistencia<span class="sort-icon si" data-t="citas" data-c="asistencia_label">⬍</span></th>
+            <th>Acción</th>
+          </tr>
+          <tr class="filter-row">
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('citas','id',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('citas','paciente',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('citas','cedula',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('citas','especialidad',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('citas','medico',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="dd/mm/aaaa" oninput="flt('citas','fecha_fmt',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('citas','hora',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('citas','turno',this.value)"></td>
+            <td><select class="fi-sel" onchange="flt('citas','estado',this.value)">
+              <option value="">Todos</option><option value="pendiente">Pendiente</option>
+              <option value="agendada">Agendada</option>
+              <option value="completada">Completada</option>
+              <option value="inasistida">Inasistida</option>
+              <option value="cancelada">Cancelada</option>
+            </select></td>
+            <td><select class="fi-sel" onchange="flt('citas','asistencia_label',this.value)">
+              <option value="">Todas</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="asistió">Asistió</option>
+              <option value="no asistió">No asistió</option>
+            </select></td>
+            <td></td>
+          </tr>
+        </thead>
+        <tbody id="citas-body"><tr><td colspan="11" class="text-center text-slate-400 py-10">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── MÉDICOS ───────────────────────────────────────────────────────────── -->
+<section id="sec-medicos" class="sec hidden p-7">
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-2xl font-bold text-slate-800">Médicos</h1>
+    <button class="btn btn-primary" onclick="abrirModalMedico()">+ Agregar Médico</button>
+  </div>
+  <div class="card p-4 mb-4">
+    <div class="grid grid-cols-3 gap-3">
+      <div class="form-group mb-0"><label>Buscar</label><input type="text" id="mf-buscar" placeholder="Nombre del médico…" oninput="debouncedMedicos()"></div>
+      <div class="form-group mb-0"><label>Especialidad</label><select id="mf-esp" onchange="loadMedicos()"><option value="">Todas</option></select></div>
+      <div class="form-group mb-0"><label>Estado</label>
+        <select id="mf-activo" onchange="loadMedicos()">
+          <option value="">Todos</option><option value="true">Activos</option><option value="false">Inactivos</option>
+        </select></div>
+    </div>
+  </div>
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table>
+        <thead>
+          <tr>
+            <th class="th-sort" onclick="srt('medicos','id')">ID<span class="sort-icon si" data-t="medicos" data-c="id">▲</span></th>
+            <th class="th-sort" onclick="srt('medicos','apellidos')">Nombre<span class="sort-icon si" data-t="medicos" data-c="apellidos">⬍</span></th>
+            <th class="th-sort" onclick="srt('medicos','registro_medico')">Registro<span class="sort-icon si" data-t="medicos" data-c="registro_medico">⬍</span></th>
+            <th class="th-sort" onclick="srt('medicos','especialidad')">Especialidad<span class="sort-icon si" data-t="medicos" data-c="especialidad">⬍</span></th>
+            <th class="th-sort" onclick="srt('medicos','activo')">Estado<span class="sort-icon si" data-t="medicos" data-c="activo">⬍</span></th>
+            <th>Acciones</th>
+          </tr>
+          <tr class="filter-row">
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('medicos','id',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('medicos','nombre_completo',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('medicos','registro_medico',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('medicos','especialidad',this.value)"></td>
+            <td><select class="fi-sel" onchange="flt('medicos','activo_str',this.value)">
+              <option value="">Todos</option><option value="activo">Activo</option><option value="inactivo">Inactivo</option>
+            </select></td>
+            <td></td>
+          </tr>
+        </thead>
+        <tbody id="medicos-body"><tr><td colspan="6" class="text-center text-slate-400 py-10">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── PACIENTES ─────────────────────────────────────────────────────────── -->
+<section id="sec-pacientes" class="sec hidden p-7">
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-2xl font-bold text-slate-800">Pacientes</h1>
+    <span id="pac-counter" class="counter-badge"></span>
+  </div>
+  <div class="card p-4 mb-4">
+    <div class="form-group mb-0"><label>Buscar por nombre, cédula o celular</label>
+      <input type="text" id="pf-buscar" placeholder="Escribe para buscar…" oninput="debouncedPacientes()"></div>
+  </div>
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table>
+        <thead>
+          <tr>
+            <th class="th-sort" onclick="srt('pacientes','id')">ID<span class="sort-icon si" data-t="pacientes" data-c="id">▲</span></th>
+            <th class="th-sort" onclick="srt('pacientes','apellidos')">Nombre Completo<span class="sort-icon si" data-t="pacientes" data-c="apellidos">⬍</span></th>
+            <th class="th-sort" onclick="srt('pacientes','cedula')">Cédula<span class="sort-icon si" data-t="pacientes" data-c="cedula">⬍</span></th>
+            <th class="th-sort" onclick="srt('pacientes','celular')">Celular<span class="sort-icon si" data-t="pacientes" data-c="celular">⬍</span></th>
+            <th class="th-sort" onclick="srt('pacientes','correo')">Correo<span class="sort-icon si" data-t="pacientes" data-c="correo">⬍</span></th>
+            <th class="th-sort" onclick="srt('pacientes','eps')">EPS<span class="sort-icon si" data-t="pacientes" data-c="eps">⬍</span></th>
+            <th class="th-sort" onclick="srt('pacientes','created_at')">Registrado<span class="sort-icon si" data-t="pacientes" data-c="created_at">⬍</span></th>
+            <th class="th-sort" onclick="srt('pacientes','total_citas')">Citas<span class="sort-icon si" data-t="pacientes" data-c="total_citas">⬍</span></th>
+            <th>Acciones</th>
+          </tr>
+          <tr class="filter-row">
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('pacientes','id',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('pacientes','nombre_completo',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('pacientes','cedula',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('pacientes','celular',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('pacientes','correo',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('pacientes','eps',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="aaaa-mm-dd" oninput="flt('pacientes','created_at',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('pacientes','total_citas',this.value)"></td>
+            <td></td>
+          </tr>
+        </thead>
+        <tbody id="pac-body"><tr><td colspan="9" class="text-center text-slate-400 py-10">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── ESPECIALIDADES ────────────────────────────────────────────────────── -->
+<section id="sec-especialidades" class="sec hidden p-7">
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-2xl font-bold text-slate-800">Especialidades</h1>
+    <button class="btn btn-primary" onclick="abrirModalEsp()">+ Nueva Especialidad</button>
+  </div>
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table>
+        <thead>
+          <tr>
+            <th class="th-sort" onclick="srt('especialidades','id')">ID<span class="sort-icon si" data-t="especialidades" data-c="id">▲</span></th>
+            <th class="th-sort" onclick="srt('especialidades','nombre')">Nombre<span class="sort-icon si" data-t="especialidades" data-c="nombre">⬍</span></th>
+            <th class="th-sort" onclick="srt('especialidades','descripcion')">Descripción<span class="sort-icon si" data-t="especialidades" data-c="descripcion">⬍</span></th>
+            <th class="th-sort" onclick="srt('especialidades','total_medicos')" style="text-align:center">Médicos<span class="sort-icon si" data-t="especialidades" data-c="total_medicos">⬍</span></th>
+            <th class="th-sort" onclick="srt('especialidades','activo')">Visible en Bot<span class="sort-icon si" data-t="especialidades" data-c="activo">⬍</span></th>
+            <th>Acciones</th>
+          </tr>
+          <tr class="filter-row">
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('especialidades','id',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('especialidades','nombre',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('especialidades','descripcion',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('especialidades','total_medicos',this.value)"></td>
+            <td><select class="fi-sel" onchange="flt('especialidades','activo_str',this.value)">
+              <option value="">Todos</option><option value="activo">Activo</option><option value="inactivo">Inactivo</option>
+            </select></td>
+            <td></td>
+          </tr>
+        </thead>
+        <tbody id="esp-body"><tr><td colspan="6" class="text-center text-slate-400 py-10">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── EPS ───────────────────────────────────────────────────────────────── -->
+<section id="sec-eps" class="sec hidden p-7">
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-2xl font-bold text-slate-800">EPS</h1>
+    <button class="btn btn-primary" onclick="abrirModalEpsItem()">+ Nueva EPS</button>
+  </div>
+  <p class="text-sm text-slate-500 mb-4">Configura qué documentos exige cada EPS al agendar una cita: orden médica, autorización, ambas o ninguna. La <b>autorización opcional</b> se pide pero permite continuar sin ella.</p>
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table>
+        <thead>
+          <tr>
+            <th class="th-sort" onclick="srt('eps','id')">ID<span class="sort-icon si" data-t="eps" data-c="id">▲</span></th>
+            <th class="th-sort" onclick="srt('eps','nombre')">Nombre<span class="sort-icon si" data-t="eps" data-c="nombre">⬍</span></th>
+            <th style="text-align:center">Orden médica</th>
+            <th style="text-align:center">Autorización</th>
+            <th style="text-align:center">Autoriz. opcional</th>
+            <th class="th-sort" onclick="srt('eps','total_pacientes')" style="text-align:center">Pacientes<span class="sort-icon si" data-t="eps" data-c="total_pacientes">⬍</span></th>
+            <th class="th-sort" onclick="srt('eps','activo')">Activa<span class="sort-icon si" data-t="eps" data-c="activo">⬍</span></th>
+            <th>Acciones</th>
+          </tr>
+          <tr class="filter-row">
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('eps','id',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('eps','nombre',this.value)"></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('eps','total_pacientes',this.value)"></td>
+            <td><select class="fi-sel" onchange="flt('eps','activo_str',this.value)">
+              <option value="">Todas</option><option value="activo">Activa</option><option value="inactivo">Inactiva</option>
+            </select></td>
+            <td></td>
+          </tr>
+        </thead>
+        <tbody id="eps-body"><tr><td colspan="8" class="text-center text-slate-400 py-10">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── FECHAS DISPONIBLES ────────────────────────────────────────────────── -->
+<section id="sec-fechas" class="sec hidden p-7">
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-2xl font-bold text-slate-800">Fechas Disponibles</h1>
+    <div class="flex gap-2">
+      <button class="btn btn-primary" onclick="abrirModalCargarHorarios()">📤 Cargar horarios</button>
+      <button class="btn btn-secondary" onclick="limpiarFechasHuerfanas()" title="Elimina las fechas que no tienen slots ni citas asociadas">🧹 Limpiar huérfanas</button>
+      <button class="btn btn-secondary" onclick="abrirModalFecha()">+ Agregar Fecha</button>
+    </div>
+  </div>
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table>
+        <thead>
+          <tr>
+            <th class="th-sort" onclick="srt('fechas','id')">ID<span class="sort-icon si" data-t="fechas" data-c="id">▲</span></th>
+            <th class="th-sort" onclick="srt('fechas','fecha')">Fecha<span class="sort-icon si" data-t="fechas" data-c="fecha">⬍</span></th>
+            <th class="th-sort" onclick="srt('fechas','dia')">Día<span class="sort-icon si" data-t="fechas" data-c="dia">⬍</span></th>
+            <th class="th-sort" onclick="srt('fechas','medicos')" style="text-align:center" title="Cuántos médicos distintos tienen slots ese día">Médicos<span class="sort-icon si" data-t="fechas" data-c="medicos">⬍</span></th>
+            <th class="th-sort" onclick="srt('fechas','slots_libres')" style="text-align:center" title="Slots libres / ocupados / total del día">Slots<br><span class="text-slate-400" style="font-weight:400;text-transform:none">libres / ocup / total</span><span class="sort-icon si" data-t="fechas" data-c="slots_libres">⬍</span></th>
+            <th class="th-sort" onclick="srt('fechas','activo')">Activa<span class="sort-icon si" data-t="fechas" data-c="activo">⬍</span></th>
+            <th>Acción</th>
+          </tr>
+          <tr class="filter-row">
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('fechas','id',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="aaaa-mm-dd" oninput="flt('fechas','fecha',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('fechas','dia',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('fechas','medicos',this.value)"></td>
+            <td><input class="fi" type="text" placeholder="🔍" oninput="flt('fechas','slots_libres',this.value)"></td>
+            <td><select class="fi-sel" onchange="flt('fechas','activo_str',this.value)">
+              <option value="">Todas</option><option value="activo">Activa</option><option value="inactivo">Inactiva</option>
+            </select></td>
+            <td></td>
+          </tr>
+        </thead>
+        <tbody id="fechas-body"><tr><td colspan="6" class="text-center text-slate-400 py-10">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── HORARIOS ──────────────────────────────────────────────────────────── -->
+<section id="sec-horarios" class="sec hidden p-7">
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-2xl font-bold text-slate-800">Horarios Médicos</h1>
+    <button class="btn btn-primary" onclick="abrirModalHorario()">+ Agregar Horario</button>
+  </div>
+  <div class="card p-4 mb-4">
+    <div class="form-group mb-0"><label>Filtrar por especialidad</label>
+      <select id="hf-esp" onchange="loadHorarios()" style="max-width:340px"><option value="">Todas las especialidades</option></select></div>
+  </div>
+  <p class="text-sm text-slate-500 mb-3">Cada médico se muestra contraído: la jornada de la mañana en la primera columna y la de la tarde en la segunda. Haz clic en un médico para ver y editar sus horarios (solo uno se expande a la vez).</p>
+  <div id="hor-acc"><div class="card p-8 text-center text-slate-400">Cargando…</div></div>
+</section>
+
+<!-- ── HISTÓRICO DE CITAS (solo lectura) ──────────────────────────────────── -->
+<section id="sec-historico" class="sec hidden p-7">
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-2xl font-bold text-slate-800">Histórico de Citas</h1>
+    <span id="hist-counter" class="counter-badge"></span>
+  </div>
+  <p class="text-sm text-slate-500 mb-4">Registro de solo lectura de las citas archivadas</p>
+  <div class="card p-4 mb-4">
+    <div class="grid grid-cols-3 gap-3">
+      <div class="form-group mb-0"><label>Estado</label>
+        <select id="hf-estado" onchange="loadHistorico()">
+          <option value="">Todos</option>
+          <option value="agendada">Agendadas</option>
+          <option value="completada">Completadas</option>
+          <option value="inasistida">Inasistidas</option>
+          <option value="cancelada">Canceladas</option>
+        </select></div>
+      <div class="form-group mb-0"><label>Buscar</label><input type="text" id="hf-buscar" placeholder="Paciente, cédula o médico…" oninput="debouncedHist()"></div>
+    </div>
+  </div>
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Paciente</th><th>Cédula</th><th>Especialidad</th><th>Médico</th>
+            <th>Fecha</th><th>Hora</th><th>Turno</th><th>Estado</th><th>Tipo</th><th>Archivado</th>
+          </tr>
+        </thead>
+        <tbody id="hist-body"><tr><td colspan="11" class="text-center text-slate-400 py-10">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── MÉTRICAS ──────────────────────────────────────────────────────────── -->
+<section id="sec-metricas" class="sec hidden p-7">
+  <h1 class="text-2xl font-bold text-slate-800 mb-5">Métricas de agendamiento</h1>
+  <div class="stat-row" style="align-items:stretch">
+    <div class="card p-5" style="flex:1 1 300px;min-width:280px">
+      <div class="text-xs font-bold text-slate-500 uppercase mb-2" style="letter-spacing:.05em">⭐ Satisfacción del servicio</div>
+      <div id="m-sat-resumen" class="mb-3"></div>
+      <div id="m-sat-distrib"></div>
+    </div>
+    <div class="card p-5" style="flex:1 1 300px;min-width:280px">
+      <div class="text-xs font-bold text-slate-500 uppercase mb-2" style="letter-spacing:.05em">⏱️ Tiempo de agendamiento (chatbot)</div>
+      <div id="m-tiempos"></div>
+    </div>
+    <div class="card p-5" style="flex:1 1 300px;min-width:280px">
+      <div class="text-xs font-bold text-slate-500 uppercase mb-2" style="letter-spacing:.05em">⏱️ Tiempo de confirmación (personal)</div>
+      <div id="m-confirmacion"></div>
+    </div>
+  </div>
+  <div class="card overflow-hidden mt-4">
+    <div class="overflow-x-auto">
+      <table>
+        <thead><tr>
+          <th>Cita</th><th>Paciente</th><th>Calificación</th><th>Agendamiento</th><th>Confirmación</th><th>Fecha</th>
+        </tr></thead>
+        <tbody id="m-recientes"><tr><td colspan="6" class="text-center text-slate-400 py-10">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── SISTEMA ───────────────────────────────────────────────────────────── -->
+<section id="sec-sistema" class="sec hidden p-7">
+  <h1 class="text-2xl font-bold text-slate-800 mb-6">Sistema</h1>
+
+  <!-- Card: Limpieza de documentos -->
+  <div class="card p-6 max-w-2xl mb-5">
+    <h3 class="font-semibold text-slate-800 mb-2">🧹 Limpieza de documentos</h3>
+    <p class="text-sm text-slate-600 mb-4">
+      Elimina las fotos y PDFs de <span class="font-mono">static/documentos/</span>
+      que ya no están asociados a una cita activa. Los documentos de citas en estado
+      <b>pendiente</b> o <b>agendada</b> se conservan siempre.
+    </p>
+
+    <div id="limp-stats" class="text-sm text-slate-600 mb-4 p-3 rounded" style="background:#f8fafc">
+      Cargando estadísticas…
+    </div>
+
+    <div class="form-group">
+      <label>Frecuencia de la limpieza automática</label>
+      <select id="limp-frecuencia" onchange="limpCambiarFrecuencia()">
+        <option value="desactivado">Desactivada (solo manual)</option>
+        <option value="diario">Diaria (cada 24 horas)</option>
+        <option value="semanal">Semanal (cada 7 días)</option>
+        <option value="mensual">Mensual (cada 30 días)</option>
+      </select>
+      <div id="limp-ultima" class="text-xs text-slate-500 mt-1"></div>
+    </div>
+
+    <div class="flex gap-2">
+      <button class="btn btn-primary" onclick="limpEjecutarAhora()">🧹 Limpiar ahora</button>
+      <button class="btn btn-secondary" onclick="limpRefrescar()">🔄 Actualizar</button>
+    </div>
+  </div>
+
+  <div class="card p-6 border-2 border-red-200 max-w-2xl">
+    <h3 class="font-semibold text-red-700 mb-2">⚠️ Zona peligrosa — Reiniciar citas activas</h3>
+    <p class="text-sm text-slate-600 mb-1">Esta acción:</p>
+    <ul class="text-sm text-slate-600 list-disc pl-6 mb-4 space-y-0.5">
+      <li>Archiva todas las citas en <span class="font-mono">historico_citas</span> (no se pierden).</li>
+      <li>Borra únicamente las citas <b>activas</b> (agendadas); las demás se conservan.</li>
+      <li><b>No</b> modifica los IDs de los médicos.</li>
+    </ul>
+    <p class="text-sm text-slate-500 mb-4">Requiere contraseña de administrador. No se puede deshacer (salvo el histórico).</p>
+    <button class="btn btn-danger" onclick="abrirReinicioSistema()">🔄 Reiniciar citas activas</button>
+  </div>
+
+  <div class="card p-6 border-2 border-red-200 max-w-2xl mt-5">
+    <h3 class="font-semibold text-red-700 mb-2">🗑️ Eliminar todos los pacientes</h3>
+    <ul class="text-sm text-slate-600 list-disc pl-6 mb-4 space-y-0.5">
+      <li>Archiva los pacientes en <span class="font-mono">historico_pacientes</span> y las citas en <span class="font-mono">historico_citas</span>.</li>
+      <li>Borra <b>todos los pacientes</b> y sus citas; reinicia sus IDs.</li>
+      <li>Las sesiones de WhatsApp se reinician (los usuarios re-verifican su cédula).</li>
+    </ul>
+    <p class="text-sm text-slate-500 mb-4">Requiere contraseña de administrador. No se puede deshacer (salvo el histórico).</p>
+    <button class="btn btn-danger" onclick="abrirEliminarPacientes()">🗑️ Eliminar pacientes</button>
+  </div>
+
+  <div class="card p-6 border-2 border-red-200 max-w-2xl mt-5">
+    <h3 class="font-semibold text-red-700 mb-2">🗑️ Eliminar todos los médicos</h3>
+    <ul class="text-sm text-slate-600 list-disc pl-6 mb-4 space-y-0.5">
+      <li>Archiva todas las citas en <span class="font-mono">historico_citas</span>.</li>
+      <li>Borra <b>todos los médicos</b>, sus horarios y sus citas; reinicia sus IDs.</li>
+      <li>El agendamiento quedará sin disponibilidad hasta crear médicos de nuevo.</li>
+    </ul>
+    <p class="text-sm text-slate-500 mb-4">Requiere contraseña de administrador. No se puede deshacer (salvo el histórico).</p>
+    <button class="btn btn-danger" onclick="abrirEliminarMedicos()">🗑️ Eliminar médicos</button>
+  </div>
+</section>
+
+</main>
+
+<!-- ═══════════════════════ MODAL ═════════════════════════════════════════ -->
+<div id="modal-overlay" class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" style="display:none!important">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+    <div class="flex items-center justify-between px-6 py-4 border-b">
+      <h3 id="modal-title" class="text-lg font-bold text-slate-800"></h3>
+      <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 text-3xl leading-none font-light">×</button>
+    </div>
+    <div id="modal-body" class="px-6 py-5 overflow-y-auto flex-1"></div>
+    <div class="flex gap-3 px-6 py-4 border-t bg-slate-50 rounded-b-2xl justify-end">
+      <button onclick="closeModal()" class="btn btn-secondary">Cancelar</button>
+      <button id="modal-ok" class="btn btn-primary">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ CONFIRM ═══════════════════════════════════════ -->
+<div id="confirm-overlay" class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" style="display:none!important">
+  <div class="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-sm mx-4">
+    <div class="text-3xl mb-3">⚠️</div>
+    <h3 class="font-bold text-slate-800 text-lg mb-1">Confirmar Acción</h3>
+    <p id="confirm-msg" class="text-slate-500 text-sm mb-6"></p>
+    <div class="flex gap-3 justify-end">
+      <button onclick="closeConfirm()" class="btn btn-secondary">Cancelar</button>
+      <button id="confirm-ok-btn" class="btn btn-danger">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ TOASTS ════════════════════════════════════════ -->
+<!-- ══════════════ MODAL: Cargar horarios semanales por Excel ═════════════ -->
+<div id="carga-overlay" class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" style="display:none!important">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[92vh] flex flex-col">
+    <div class="flex items-center justify-between px-6 py-4 border-b">
+      <h3 class="text-lg font-bold text-slate-800">📤 Cargar horarios semanales</h3>
+      <button onclick="cerrarModalCargarHorarios()" class="text-slate-400 hover:text-slate-700 text-3xl leading-none font-light">×</button>
+    </div>
+    <div id="carga-body" class="px-6 py-5 overflow-y-auto flex-1">
+      <!-- PASO 1: seleccionar fecha del lunes + subir Excel -->
+      <div id="carga-paso1">
+        <p class="text-sm text-slate-600 mb-4">
+          Sube el <b>Excel semanal</b> con los horarios de los médicos. El archivo debe tener
+          columnas con los nombres de los días (<b>Lunes, Martes, Miércoles, …</b>).
+          El sistema asignará las fechas automáticamente a partir del lunes que elijas.
+        </p>
+
+        <div class="form-group">
+          <label>📅 Semana que empieza el (lunes) *</label>
+          <input id="carga-fecha-lunes" type="date">
+          <div id="carga-fecha-hint" class="text-xs text-slate-500 mt-1"></div>
+        </div>
+
+        <div class="form-group">
+          <label>📎 Archivo Excel (.xlsx) *</label>
+          <div id="carga-drop"
+               style="border:2px dashed #cbd5e1; border-radius:10px; padding:26px; text-align:center; cursor:pointer; background:#fafcff; transition:all .15s"
+               onclick="document.getElementById('carga-file').click()">
+            <div style="font-size:32px">📁</div>
+            <div class="text-sm text-slate-700 font-medium mt-1">Arrastra el archivo aquí</div>
+            <div class="text-xs text-slate-500">o haz clic para seleccionarlo</div>
+            <div id="carga-file-name" class="text-xs text-blue-600 mt-2 font-medium"></div>
+          </div>
+          <input id="carga-file" type="file" accept=".xlsx" style="display:none">
+        </div>
+
+        <div class="flex gap-3 justify-end mt-6">
+          <button class="btn btn-secondary" onclick="cerrarModalCargarHorarios()">Cancelar</button>
+          <button id="carga-btn-analizar" class="btn btn-primary" onclick="cargaAnalizarExcel()">Analizar archivo</button>
+        </div>
+      </div>
+
+      <!-- PASO 2: preview editable -->
+      <div id="carga-paso2" style="display:none">
+        <div id="carga-resumen" class="mb-4"></div>
+        <div class="overflow-x-auto border rounded-lg" style="max-height:420px">
+          <table class="text-sm">
+            <thead style="position:sticky;top:0;background:#f8fafc;z-index:1">
+              <tr>
+                <th>Médico</th>
+                <th>Especialidad</th>
+                <th>Fecha</th>
+                <th>Hora</th>
+                <th style="width:60px">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="carga-preview-body"></tbody>
+          </table>
+        </div>
+        <div class="flex gap-3 justify-between items-center mt-4">
+          <button class="btn btn-secondary" onclick="cargaVolver()">↩️ Volver</button>
+          <button id="carga-btn-guardar" class="btn btn-success" onclick="cargaGuardar()">✅ Guardar horarios</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+
+<!-- ═══════════════════════ LOGIN ════════════════════════════════════════ -->
+<div id="login-overlay"
+     style="display:none; position:fixed; inset:0; z-index:120;
+            background:rgba(15,23,42,.80); align-items:center; justify-content:center;">
+  <form id="login-form" class="card"
+        style="width:360px; max-width:92vw; padding:30px 28px;">
+    <div style="text-align:center; margin-bottom:20px;">
+      <div style="font-size:30px; line-height:1;">🏥</div>
+      <div style="font-size:18px; font-weight:700; color:#0f172a; margin-top:6px;">Panel Administrativo</div>
+      <div style="font-size:13px; color:#64748b;">Hospital Civil de Ipiales</div>
+    </div>
+    <div class="form-group">
+      <label>Usuario</label>
+      <input id="login-user" type="text" autocomplete="username" autofocus>
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input id="login-pass" type="password" autocomplete="current-password">
+    </div>
+    <div id="login-error" style="color:#dc2626; font-size:13px; min-height:18px; margin-bottom:8px;"></div>
+    <button type="submit" id="login-btn" class="btn btn-primary" style="width:100%; justify-content:center;">Ingresar</button>
+  </form>
+</div>
+
+<!-- ═══════════════════════ SCRIPTS ══════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+const $ = id => document.getElementById(id);
+const fmt = d => d ? d.replace(/(\d{4})-(\d{2})-(\d{2})/, '$3/$2/$1') : '—';
+const esc = s => String(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+
+function debounce(fn, ms) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+function badge(estado) {
+  const m = {
+    pendiente:'badge-pendiente', agendada:'badge-agendada', cancelada:'badge-cancelada',
+    completada:'badge-completada', inasistida:'badge-inasistida'
+  };
+  const labels = {
+    pendiente:'⏳ Pendiente', agendada:'Agendada', cancelada:'Cancelada',
+    completada:'Completada', inasistida:'Inasistida'
+  };
+  return `<span class="badge ${m[estado]||'badge-inactivo'}">${labels[estado]||estado}</span>`;
+}
+function badgeActivo(v) {
+  return v ? '<span class="badge badge-activo">✓ Activo</span>'
+           : '<span class="badge badge-inactivo">✗ Inactivo</span>';
+}
+function toggle(id, checked, fn) {
+  return `<label class="toggle"><input type="checkbox" ${checked?'checked':''} onchange="${fn}(${id},this.checked)"><span class="toggle-track"></span></label>`;
+}
+
+// ─── API ────────────────────────────────────────────────────────────────────
+
+async function api(method, path, body = null) {
+  const opts = { method, headers: { 'Content-Type':'application/json' }, credentials: 'same-origin' };
+  if (body !== null) opts.body = JSON.stringify(body);
+  const res = await fetch('/admin' + path, opts);
+  // Sesión ausente o caducada → mostrar login y detener la operación.
+  if (res.status === 401) {
+    mostrarLogin(true);
+    throw new Error('Tu sesión expiró. Inicia sesión de nuevo.');
+  }
+  let data; try { data = await res.json(); } catch { data = {}; }
+  if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
+  return data;
+}
+
+// ─── Autenticación ────────────────────────────────────────────────────────────
+
+function mostrarLogin(mostrar) {
+  const ov = $('login-overlay');
+  ov.style.display = mostrar ? 'flex' : 'none';
+  if (mostrar) { const u = $('login-user'); if (u) u.focus(); }
+}
+
+async function checkAuth() {
+  try {
+    const res = await fetch('/admin/me', { credentials: 'same-origin' });
+    return res.ok;
+  } catch { return false; }
+}
+
+async function doLogin() {
+  const btn = $('login-btn');
+  const err = $('login-error');
+  err.textContent = '';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        usuario: ($('login-user').value || '').trim(),
+        password: $('login-pass').value || '',
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { err.textContent = data.detail || 'No se pudo iniciar sesión.'; return; }
+    $('login-pass').value = '';
+    mostrarLogin(false);
+    await bootApp();
+  } catch {
+    err.textContent = 'No se pudo conectar con el servidor.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doLogout() {
+  try { await fetch('/admin/logout', { method:'POST', credentials:'same-origin' }); } catch {}
+  mostrarLogin(true);
+}
+
+async function bootApp() {
+  restaurarSidebar();
+  await refreshCache();
+  go('dashboard');
+  iniciarNotificacionesPendientes();
+}
+
+// ─── Notificaciones de citas pendientes ─────────────────────────────────────
+// Cada 30 s consulta el número de citas pendientes de confirmar.
+//   · Actualiza el badge rojo en el sidebar (junto a "Citas Médicas").
+//   · Si el número SUBIÓ desde la última consulta, dispara una notificación
+//     del navegador (si el usuario dio permiso) para avisar aunque el panel
+//     esté en otra pestaña.
+// El permiso de notificaciones se solicita una sola vez al abrir el panel.
+
+const NOTIF_INTERVALO_MS = 30_000;
+let _pendientesUltimo = null;   // último valor conocido (null = 1ra vez)
+
+function iniciarNotificacionesPendientes() {
+  // Pedir permiso una vez (solo si el usuario aún no ha decidido).
+  if ('Notification' in window && Notification.permission === 'default') {
+    // Requiere gesto de usuario en algunos navegadores; el permiso pedido
+    // desde una acción de inicio de sesión suele contar como tal.
+    try { Notification.requestPermission(); } catch (_) {}
+  }
+  // Primer chequeo inmediato + intervalo periódico
+  chequearPendientes();
+  setInterval(chequearPendientes, NOTIF_INTERVALO_MS);
+}
+
+async function chequearPendientes() {
+  try {
+    // Endpoint ligero: solo devuelve el contador (evita traer todo el dashboard).
+    const r = await api('GET', '/citas/pendientes/contador');
+    const n = Number(r.pendientes) || 0;
+    actualizarBadgePendientes(n);
+    // Si subió respecto al último conocido, notificar (skip la 1ra carga).
+    if (_pendientesUltimo !== null && n > _pendientesUltimo) {
+      const nuevas = n - _pendientesUltimo;
+      dispararNotificacionNavegador(nuevas, n);
+    }
+    _pendientesUltimo = n;
+  } catch (e) {
+    // Silencioso: si la sesión expiró o hay error de red, no ensuciar la UI.
+    console.warn('chequearPendientes:', e && e.message ? e.message : e);
+  }
+}
+
+function actualizarBadgePendientes(n) {
+  const badge = $('nav-badge-pendientes');
+  if (!badge) return;
+  if (n > 0) {
+    badge.textContent = n > 99 ? '99+' : String(n);
+    badge.classList.remove('hidden');
+    // Pulso solo si el número subió (o es el estado inicial > 0)
+    if (_pendientesUltimo === null || n > _pendientesUltimo) {
+      badge.classList.remove('new');
+      // Trigger reflow para reiniciar la animación
+      void badge.offsetWidth;
+      badge.classList.add('new');
+    }
+  } else {
+    badge.classList.add('hidden');
+    badge.classList.remove('new');
+  }
+}
+
+function dispararNotificacionNavegador(cantidadNuevas, totalActual) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const titulo = cantidadNuevas === 1
+      ? '🔔 Nueva cita pendiente de confirmar'
+      : `🔔 ${cantidadNuevas} nuevas citas pendientes de confirmar`;
+    const cuerpo = `Hay ${totalActual} solicitud(es) pendiente(s) en el panel del hospital.`;
+    const n = new Notification(titulo, {
+      body: cuerpo,
+      tag:  'chatbot-pendientes',   // reutiliza la misma notificación (no apila)
+      renotify: true,
+      requireInteraction: false,
+    });
+    // Al hacer clic, enfoca la pestaña y navega a la sección de citas pendientes.
+    n.onclick = () => {
+      window.focus();
+      try {
+        go('citas');
+        const filtro = $('cf-estado');
+        if (filtro) { filtro.value = 'pendiente'; loadCitas(); }
+      } catch (_) {}
+      n.close();
+    };
+  } catch (e) {
+    console.warn('notificacion:', e && e.message ? e.message : e);
+  }
+}
+
+// ─── Toast ──────────────────────────────────────────────────────────────────
+
+function toast(msg, type = 'success') {
+  const colors = { success:'bg-green-600', error:'bg-red-600', info:'bg-blue-600' };
+  const icons  = { success:'✅', error:'❌', info:'ℹ️' };
+  const el = document.createElement('div');
+  el.className = `${colors[type]||colors.info} text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2 transition-opacity duration-300`;
+  el.style.minWidth = '220px';
+  el.textContent = (icons[type]||'') + ' ' + msg;
+  $('toasts').appendChild(el);
+  setTimeout(() => el.style.opacity='0', 3200);
+  setTimeout(() => el.remove(), 3600);
+}
+
+// ─── Modal ──────────────────────────────────────────────────────────────────
+
+let _saveFn = null;
+function openModal(title, html, saveFn, okLabel='Guardar', okClass='btn-primary') {
+  $('modal-title').textContent = title;
+  $('modal-body').innerHTML = html;
+  const ok = $('modal-ok');
+  ok.textContent = okLabel;
+  ok.className = `btn ${okClass}`;
+  _saveFn = saveFn;
+  $('modal-overlay').style.removeProperty('display');
+}
+function closeModal() {
+  $('modal-overlay').style.setProperty('display','none','important');
+  _saveFn = null;
+}
+$('modal-ok').addEventListener('click', async () => {
+  if (!_saveFn) return;
+  $('modal-ok').disabled = true;
+  try { await _saveFn(); } catch(e) { toast(e.message,'error'); }
+  finally { $('modal-ok').disabled = false; }
+});
+
+// ─── Confirm ────────────────────────────────────────────────────────────────
+
+let _confirmFn = null;
+function openConfirm(msg, fn, label='Eliminar', btnClass='btn-danger') {
+  $('confirm-msg').textContent = msg;
+  $('confirm-ok-btn').textContent = label;
+  $('confirm-ok-btn').className = `btn ${btnClass}`;
+  _confirmFn = fn;
+  $('confirm-overlay').style.removeProperty('display');
+}
+function closeConfirm() {
+  $('confirm-overlay').style.setProperty('display','none','important');
+  _confirmFn = null;
+}
+$('confirm-ok-btn').addEventListener('click', async () => {
+  if (!_confirmFn) return;
+  $('confirm-ok-btn').disabled = true;
+  try { await _confirmFn(); closeConfirm(); } catch(e) { toast(e.message,'error'); closeConfirm(); }
+  finally { $('confirm-ok-btn').disabled = false; }
+});
+['modal-overlay','confirm-overlay'].forEach(id =>
+  $(id).addEventListener('click', e => { if(e.target===$(id)) id==='modal-overlay'?closeModal():closeConfirm(); })
+);
+
+// ─── Navigation ─────────────────────────────────────────────────────────────
+
+const loaders = {
+  dashboard: loadDashboard, citas: loadCitas, medicos: loadMedicos,
+  pacientes: loadPacientes, especialidades: loadEsps, eps: loadEpsList,
+  fechas: loadFechas, horarios: loadHorarios, historico: loadHistorico,
+  metricas: loadMetricas,
+  sistema: limpRefrescar,   // al abrir Sistema, refresca las stats de limpieza
+};
+function go(name) {
+  document.querySelectorAll('.sec').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const sec = $('sec-' + name);
+  sec.classList.remove('hidden');
+  // Re-disparar la animación de entrada de la sección en cada cambio
+  sec.style.animation = 'none';
+  void sec.offsetWidth;            // forzar reflujo
+  sec.style.animation = 'app-fade-up .38s var(--ease-calm)';
+  document.querySelector(`[data-section="${name}"]`).classList.add('active');
+  // Reiniciar flag de inasistencias para que se vuelva a ejecutar al entrar a Citas
+  if (name === 'citas') _citasInicializado = false;
+  if (loaders[name]) loaders[name]();
+}
+
+// ─── Sistema: reinicio protegido ──────────────────────────────────────────────
+
+function abrirAccionPeligrosa(titulo, advertenciaHTML, endpoint, toastFn, okLabel='Eliminar') {
+  openModal(
+    titulo,
+    `<div class="space-y-3">
+       <p class="text-sm text-slate-600">${advertenciaHTML}</p>
+       <label class="block text-sm font-medium text-slate-700">Contraseña de administrador</label>
+       <input id="reset-pass" type="password" autocomplete="off"
+              class="w-full border rounded-lg px-3 py-2 text-sm"
+              placeholder="Ingresa la contraseña para confirmar">
+     </div>`,
+    async () => {
+      const pass = (document.getElementById('reset-pass').value || '').trim();
+      if (!pass) { toast('Ingresa la contraseña', 'error'); return; }
+      const r = await api('POST', endpoint, { password: pass });
+      closeModal();
+      toast(toastFn(r));
+      await refreshCache();
+      loadDashboard();
+    },
+    okLabel, 'btn-danger'
+  );
+}
+
+// ─── Limpieza de documentos (Sistema) ──────────────────────────────────────
+
+async function limpRefrescar() {
+  try {
+    const r = await api('GET', '/sistema/limpieza-docs');
+    // Selector de frecuencia
+    $('limp-frecuencia').value = r.frecuencia || 'semanal';
+    // Última ejecución
+    $('limp-ultima').textContent = r.ultima_ejecucion
+      ? `Última limpieza: ${new Date(r.ultima_ejecucion).toLocaleString()}`
+      : 'Última limpieza: nunca';
+    // Stats
+    const el = $('limp-stats');
+    const proteg  = r.protegidos    || 0;
+    const borr    = r.borrable      || 0;
+    const total   = r.total_archivos || 0;
+    el.innerHTML = `
+      <div class="flex justify-between mb-1">
+        <span>📁 Total de archivos</span>
+        <b>${total}</b>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span>🔒 Protegidos (pendiente/agendada)</span>
+        <b class="text-green-700">${proteg}</b>
+      </div>
+      <div class="flex justify-between mb-1">
+        <span>🧹 Se borrarían al limpiar</span>
+        <b class="text-orange-600">${borr}</b>
+      </div>
+      <div class="flex justify-between mt-2 pt-2 border-t">
+        <span>💾 Espacio total</span>
+        <b>${esc(r.tamano_total || '0 B')}</b>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-slate-500">Espacio que se liberaría</span>
+        <span class="text-orange-600 font-medium">${esc(r.tamano_borrable || '0 B')}</span>
+      </div>`;
+  } catch (e) {
+    $('limp-stats').innerHTML = `<span class="text-red-600">Error: ${esc(e.message)}</span>`;
+  }
+}
+
+async function limpCambiarFrecuencia() {
+  const frec = $('limp-frecuencia').value;
+  try {
+    await api('PUT', '/sistema/limpieza-docs', { frecuencia: frec });
+    const nombres = { desactivado:'Desactivada', diario:'Diaria', semanal:'Semanal', mensual:'Mensual' };
+    toast(`✅ Frecuencia: ${nombres[frec] || frec}`, 'success');
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+async function limpEjecutarAhora() {
+  const stats = $('limp-stats');
+  const original = stats.innerHTML;
+  openConfirm(
+    'Se eliminarán las fotos y PDFs que NO estén asociados a citas ' +
+    'pendientes o agendadas. Los documentos de citas activas quedan intactos.\n\n' +
+    '¿Continuar?',
+    async () => {
+      stats.innerHTML = '⏳ Limpiando…';
+      try {
+        const r = await api('POST', '/sistema/limpieza-docs/ejecutar');
+        toast(
+          `🧹 ${r.borrados} archivo(s) borrado(s) · ${r.espacio_liberado} liberado(s)`,
+          'success'
+        );
+        if (r.errores && r.errores.length) {
+          console.warn('Errores durante la limpieza:', r.errores);
+        }
+        await limpRefrescar();
+      } catch (e) {
+        stats.innerHTML = original;
+        toast('Error: ' + e.message, 'error');
+      }
+    },
+    '🧹 Limpiar ahora'
+  );
+}
+
+function abrirReinicioSistema() {
+  abrirAccionPeligrosa(
+    '⚠️ Reiniciar citas activas',
+    'Se archivarán todas las citas en <span class="font-mono">historico_citas</span> y se borrarán únicamente las citas <b>activas</b> (agendadas). Las demás se conservan y los <b>IDs de los médicos no se modifican</b>. No se puede deshacer.',
+    '/sistema/reset',
+    r => `Listo · ${r.activas_eliminadas} cita(s) activa(s) eliminada(s) · ${r.archivadas} archivada(s)`,
+    'Reiniciar'
+  );
+}
+
+function abrirEliminarPacientes() {
+  abrirAccionPeligrosa(
+    '⚠️ Eliminar todos los pacientes',
+    'Se archivarán las citas y se borrarán <b>todos los pacientes</b> junto con sus citas. Las sesiones de WhatsApp se reiniciarán. Esta acción no se puede deshacer.',
+    '/sistema/eliminar_pacientes',
+    r => `${r.pacientes_eliminados} paciente(s) y ${r.citas_eliminadas} cita(s) eliminadas · ${r.pacientes_archivados} paciente(s) y ${r.archivadas} cita(s) archivadas`
+  );
+}
+
+function abrirEliminarMedicos() {
+  abrirAccionPeligrosa(
+    '⚠️ Eliminar todos los médicos',
+    'Se archivarán las citas y se borrarán <b>todos los médicos</b>, sus horarios y sus citas. Esta acción no se puede deshacer.',
+    '/sistema/eliminar_medicos',
+    r => `${r.medicos_eliminados} médico(s), ${r.horarios_eliminados} horario(s) y ${r.citas_eliminadas} cita(s) eliminadas`
+  );
+}
+
+// ─── Histórico de citas (solo lectura) ────────────────────────────────────────
+
+const debouncedHist = debounce(loadHistorico, 400);
+
+async function loadHistorico() {
+  const estado = $('hf-estado').value;
+  const buscar = $('hf-buscar').value.trim();
+  const qs = new URLSearchParams();
+  if (estado) qs.set('estado', estado);
+  if (buscar) qs.set('buscar', buscar);
+  qs.set('limit', '500');
+  let data;
+  try { data = await api('GET', '/historico?' + qs.toString()); }
+  catch (e) { toast(e.message, 'error'); return; }
+  $('hist-counter').textContent = `${data.total} registro(s)`;
+  const rows = data.items.map(h => `<tr>
+      <td class="font-mono text-slate-400">#${h.id}</td>
+      <td class="font-medium">${h.paciente}</td>
+      <td class="font-mono text-sm text-slate-500">${h.cedula}</td>
+      <td>${h.especialidad}</td>
+      <td class="text-slate-500 text-sm">${h.medico}</td>
+      <td class="font-mono text-sm">${fmt(h.fecha)}</td>
+      <td class="font-mono text-sm">${h.hora}</td>
+      <td class="text-slate-500 text-sm">${h.turno}</td>
+      <td>${badge(h.estado)}</td>
+      <td class="text-slate-500 text-sm">${h.tipo_servicio}</td>
+      <td class="font-mono text-xs text-slate-400">${h.archivado}</td>
+    </tr>`).join('');
+  $('hist-body').innerHTML = rows || '<tr><td colspan="11" class="text-center text-slate-400 py-10">No hay registros en el histórico</td></tr>';
+}
+
+// ─── Global cache ────────────────────────────────────────────────────────────
+
+let G = { esps: [], medicos: [], epsList: [] };
+
+async function refreshCache() {
+  try {
+    [G.esps, G.medicos, G.epsList] = await Promise.all([
+      api('GET','/especialidades'),
+      api('GET','/medicos'),
+      api('GET','/eps'),
+    ]);
+    const espOpts = G.esps.map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
+    ['cf-esp','mf-esp'].forEach(id => {
+      const el=$(id); if(el) el.innerHTML='<option value="">Todas</option>'+espOpts;
+    });
+    const hfe=$('hf-esp');
+    if(hfe) hfe.innerHTML='<option value="">Todas las especialidades</option>'+espOpts;
+  } catch(e) { console.warn('Cache error',e); }
+}
+
+// ═══════════════════════ TABLE SORT / FILTER ENGINE ═══════════════════════ //
+
+const tables = {
+  citas:         { raw:[], sortCol:'id',    sortDir:'desc', filters:{} },
+  medicos:       { raw:[], sortCol:'id',    sortDir:'asc', filters:{} },
+  pacientes:     { raw:[], sortCol:'id',    sortDir:'asc', filters:{} },
+  especialidades:{ raw:[], sortCol:'id',    sortDir:'asc', filters:{} },
+  eps:           { raw:[], sortCol:'id',    sortDir:'asc', filters:{} },
+  fechas:        { raw:[], sortCol:'id',    sortDir:'asc', filters:{} },
+  horarios:      { raw:[], sortCol:'id',    sortDir:'asc', filters:{} },
+};
+
+// Compute derived/virtual fields for filtering on non-raw keys
+function addVirtualFields(name, item) {
+  const copy = {...item};
+  // Boolean → string for filter selects
+  if ('activo' in copy) copy.activo_str = copy.activo ? 'activo' : 'inactivo';
+  // Formatted date for display filter
+  if (name === 'citas' && copy.fecha) copy.fecha_fmt = fmt(copy.fecha);
+  // Asistencia virtual field for citas
+  if (name === 'citas') {
+    const e = copy.estado;
+    if      (e === 'completada')  copy.asistencia_label = 'asistió';
+    else if (e === 'inasistida')  copy.asistencia_label = 'no asistió';
+    else if (e === 'agendada')    copy.asistencia_label = 'pendiente';
+    else                          copy.asistencia_label = '—';
+  }
+  // Full name for name column filter
+  if (name === 'medicos')   copy.nombre_completo = `${copy.nombres||''} ${copy.apellidos||''}`;
+  if (name === 'pacientes') copy.nombre_completo = `${copy.nombres||''} ${copy.apellidos||''}`;
+  return copy;
+}
+
+function applyTransform(name) {
+  const t = tables[name];
+  let data = t.raw.map(r => addVirtualFields(name, r));
+
+  // Filters
+  for (const [col, val] of Object.entries(t.filters)) {
+    if (!val) continue;
+    const v = val.toLowerCase();
+    data = data.filter(row => {
+      const cell = row[col];
+      if (cell === undefined || cell === null) return false;
+      return String(cell).toLowerCase().includes(v);
+    });
+  }
+
+  // Sort
+  const { sortCol, sortDir } = t;
+  data.sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === 'boolean') { va = va?1:0; vb = vb?1:0; }
+    else if (typeof va === 'number' && typeof vb === 'number') { /* numeric */ }
+    else { va = String(va).toLowerCase(); vb = String(vb).toLowerCase(); }
+    if (va < vb) return sortDir==='asc' ? -1 : 1;
+    if (va > vb) return sortDir==='asc' ?  1 : -1;
+    return 0;
+  });
+
+  return data;
+}
+
+// srt = sort table (short name for onclick)
+function srt(name, col) {
+  const t = tables[name];
+  t.sortDir = (t.sortCol === col) ? (t.sortDir==='asc'?'desc':'asc') : 'asc';
+  t.sortCol = col;
+  redraw(name);
+  refreshSortIcons(name);
+}
+
+// flt = filter table (short name for oninput/onchange)
+function flt(name, col, val) {
+  const t = tables[name];
+  const v = (val||'').trim();
+  if (v) t.filters[col] = v; else delete t.filters[col];
+  redraw(name);
+}
+
+function refreshSortIcons(name) {
+  const t = tables[name];
+  document.querySelectorAll(`.si[data-t="${name}"]`).forEach(el => el.textContent='⬍');
+  const active = document.querySelector(`.si[data-t="${name}"][data-c="${t.sortCol}"]`);
+  if (active) active.textContent = t.sortDir==='asc' ? '▲' : '▼';
+}
+
+const renders = {
+  citas: renderCitas, medicos: renderMedicos, pacientes: renderPacientes,
+  especialidades: renderEsps, eps: renderEpsList, fechas: renderFechas, horarios: renderHorarios,
+};
+function redraw(name) {
+  if (renders[name]) renders[name](applyTransform(name));
+}
+
+// ─── Dashboard ──────────────────────────────────────────────────────────────
+
+async function loadDashboard() {
+  try {
+    const d = await api('GET','/dashboard');
+    $('d-pendientes').textContent = d.citas_pendientes ?? 0;
+    $('d-pacientes').textContent = d.total_pacientes;
+    $('d-hoy').textContent       = d.citas_hoy;
+    $('d-mes').textContent       = d.citas_mes;
+    $('d-medicos').textContent   = d.medicos_activos;
+    $('d-esps').textContent      = d.especialidades_activas;
+    $('d-estrellas').textContent = d.satisfaccion_promedio != null ? (d.satisfaccion_promedio + ' ⭐') : '—';
+    $('d-tiempo').textContent    = fmtDur(d.tiempo_promedio_seg);
+    $('d-confirmacion').textContent = fmtDur(d.tiempo_confirmacion_promedio_seg);
+    const grupos = {
+      agendada:   { t: '📅 Agendadas', cls: 'text-green-700' },
+      inasistida: { t: '⚠️ Inasistidas', cls: 'text-orange-600' },
+      completada: { t: '✅ Completadas', cls: 'text-sky-700' },
+    };
+    let ultimoEstado = null;
+    const rows = d.citas_recientes.map(c => {
+      let header = '';
+      if (c.estado !== ultimoEstado) {
+        ultimoEstado = c.estado;
+        const g = grupos[c.estado] || { t: c.estado, cls: 'text-slate-500' };
+        header = `<tr><td colspan="6" class="pt-3 pb-1 text-xs font-bold uppercase tracking-wide ${g.cls}" style="background:#f8fafc">${g.t}</td></tr>`;
+      }
+      return header + `
+        <tr>
+          <td class="font-mono text-slate-400">#${c.id}</td>
+          <td class="font-medium">${c.paciente}</td>
+          <td>${c.especialidad}</td>
+          <td class="text-slate-500 text-sm">${c.medico}</td>
+          <td class="font-mono text-sm">${fmt(c.fecha)} ${c.hora}</td>
+          <td>${badge(c.estado)}</td>
+        </tr>`;
+    }).join('');
+    $('d-recientes').innerHTML = `<table>
+      <thead><tr><th>#</th><th>Paciente</th><th>Especialidad</th><th>Médico</th><th>Fecha / Hora</th><th>Estado</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="6" class="text-center text-slate-400 py-6">Sin citas aún</td></tr>'}</tbody>
+    </table>`;
+  } catch(e) { toast('Error dashboard: '+e.message,'error'); }
+}
+
+// ─── Citas ───────────────────────────────────────────────────────────────────
+
+const debouncedCitas = debounce(loadCitas, 400);
+// Flag: solo llamar a actualizar_inasistencias al abrir la pestaña (no en cada filtro/búsqueda)
+let _citasInicializado = false;
+
+async function loadCitas() {
+  const p = new URLSearchParams();
+  const v = id => $(id).value;
+  if(v('cf-estado')) p.set('estado',v('cf-estado'));
+  if(v('cf-desde'))  p.set('fecha_desde',v('cf-desde'));
+  if(v('cf-hasta'))  p.set('fecha_hasta',v('cf-hasta'));
+  if(v('cf-esp'))    p.set('id_especialidad',v('cf-esp'));
+  if(v('cf-buscar')) p.set('buscar',v('cf-buscar'));
+  $('citas-body').innerHTML = '<tr><td colspan="11" class="text-center text-slate-400 py-10">Cargando…</td></tr>';
+
+  // Solo marcar inasistencias la primera vez que se abre la pestaña,
+  // no en cada cambio de filtro o pulsación de tecla.
+  if (!_citasInicializado) {
+    _citasInicializado = true;
+    try {
+      const r = await api('POST', '/citas/actualizar_inasistencias');
+      if (r.actualizadas > 0) toast(`${r.actualizadas} cita(s) marcadas como inasistidas automáticamente`, 'info');
+    } catch(e) {
+      // No bloqueamos la carga de datos si este paso falla
+      console.warn('No se pudo actualizar inasistencias:', e.message);
+    }
+  }
+
+  try {
+    const d = await api('GET',`/citas?${p}`);
+    $('citas-counter').textContent = `${d.total} cita(s)`;
+    tables.citas.raw = d.items;
+    redraw('citas');
+    refreshSortIcons('citas');
+  } catch(e) {
+    toast('Error cargando citas: '+e.message,'error');
+    $('citas-body').innerHTML = '<tr><td colspan="11" class="text-center text-slate-400 py-10">Error al cargar datos</td></tr>';
+  }
+}
+
+function asistenciaCell(c) {
+  if (c.estado === 'completada')
+    return `<span class="badge badge-completada">✅ Asistió</span>`;
+  if (c.estado === 'inasistida')
+    return `<span class="badge badge-inasistida">❌ No asistió</span>`;
+  if (c.estado === 'cancelada')
+    return `<span class="text-slate-300 text-sm">—</span>`;
+
+  // estado === 'agendada': botón habilitado SOLO durante la ventana [0, +5 min]
+  // que coincide con el período de gracia antes de que el servidor la marque inasistida.
+  const citaDT  = new Date(`${c.fecha}T${c.hora}:00`);
+  const diffMin = (Date.now() - citaDT.getTime()) / 60000;
+
+  if (diffMin >= 0 && diffMin <= 5) {
+    // ✅ Dentro de la ventana → botón habilitado
+    return `<button class="btn btn-sm btn-success" onclick="marcarAsistencia(${c.id},'${esc(c.paciente)}')">✅ Marcar asistida</button>`;
+  }
+
+  // 🔒 Fuera de la ventana → botón deshabilitado con tooltip informativo
+  const titulo = diffMin < 0
+    ? `Disponible a las ${c.hora} (en ${Math.ceil(-diffMin)} min)`
+    : 'Ventana de 5 min vencida — se marcará inasistida automáticamente';
+  return `<button class="btn btn-sm btn-success" disabled title="${titulo}" style="opacity:.35;cursor:not-allowed">✅ Marcar asistida</button>`;
+}
+
+function renderCitas(data) {
+  const rows = data.map(c => `
+    <tr>
+      <td class="font-mono text-slate-400">#${c.id}</td>
+      <td class="font-medium">${c.paciente}</td>
+      <td class="font-mono text-sm text-slate-500">${c.cedula}</td>
+      <td>${c.especialidad}</td>
+      <td class="text-slate-500 text-sm">${c.medico}</td>
+      <td class="font-mono text-sm">${fmt(c.fecha)}</td>
+      <td class="font-mono text-sm">${c.hora}</td>
+      <td class="text-slate-500 text-sm">${c.turno}</td>
+      <td>${badge(c.estado)}${c.tipo_cita && c.tipo_cita!=='—' ? `<div class="text-xs text-slate-400 mt-0.5">${c.tipo_cita}</div>` : ''}</td>
+      <td>${asistenciaCell(c)}</td>
+      <td class="flex flex-wrap gap-1 py-1 items-center">
+        ${c.doc_orden ? `<a href="${c.doc_orden}" target="_blank" class="btn btn-sm btn-secondary" title="Ver orden médica">📄 Orden</a>` : ''}
+        ${c.doc_autorizacion ? `<a href="${c.doc_autorizacion}" target="_blank" class="btn btn-sm btn-secondary" title="Ver autorización">📄 Autoriz.</a>` : ''}
+        ${(c.doc_orden_datos||c.doc_autorizacion_datos) ? `<button class="btn btn-sm btn-secondary" onclick="verDatosOCR(${c.id})" title="Ver datos leídos por OCR">🔎 Datos</button>` : ''}
+        ${c.estado==='pendiente'
+          ? `<button class="btn btn-sm btn-success" onclick="confirmarCitaHospital(${c.id},'${esc(c.paciente)}')">✅ Confirmar</button>
+             <button class="btn btn-sm btn-danger" onclick="cancelarCita(${c.id},'${esc(c.paciente)}')">❌ Rechazar</button>`
+          : c.estado==='agendada'
+            ? `<button class="btn btn-sm btn-warning" onclick="cancelarCita(${c.id},'${esc(c.paciente)}')">Cancelar</button>`
+            : (c.doc_orden||c.doc_autorizacion ? '' : '<span class="text-slate-400 text-sm">—</span>')}
+      </td>
+    </tr>`).join('');
+  $('citas-body').innerHTML = rows || '<tr><td colspan="11" class="text-center text-slate-400 py-10">No hay citas con esos filtros</td></tr>';
+}
+
+function verDatosOCR(id) {
+  const c = tables.citas.raw.find(x => x.id === id);
+  if (!c) { toast('Cita no encontrada', 'error'); return; }
+  const bloque = (titulo, d, campos) => {
+    if (!d) return `<div class="mb-4"><div class="font-semibold text-slate-700">${titulo}</div><div class="text-sm text-slate-400">Sin datos (no requerido o no recibido).</div></div>`;
+    const filas = campos.filter(([k]) => d[k] != null && d[k] !== '')
+      .map(([k, label]) => `<tr><td class="pr-4 py-0.5 text-slate-500 align-top">${label}</td><td class="py-0.5 font-medium">${esc(String(d[k]))}</td></tr>`).join('');
+    return `<div class="mb-4"><div class="font-semibold text-slate-700 mb-1">${titulo}</div><table class="text-sm">${filas || '<tr><td class="text-slate-400">Sin campos legibles.</td></tr>'}</table></div>`;
+  };
+  const claveHtml = (c.numero_orden && c.numero_orden!=='—') || (c.codigo_procedimiento && c.codigo_procedimiento!=='—')
+    ? `<div class="mb-4"><div class="font-semibold text-slate-700 mb-1">🔑 Clave única de agendamiento</div>
+        <table class="text-sm">
+          <tr><td class="pr-4 py-0.5 text-slate-500">No. orden</td><td class="py-0.5 font-medium">${esc(c.numero_orden||'—')}</td></tr>
+          <tr><td class="pr-4 py-0.5 text-slate-500">Código procedimiento</td><td class="py-0.5 font-medium">${esc(c.codigo_procedimiento||'—')}</td></tr>
+          <tr><td class="pr-4 py-0.5 text-slate-500">Cédula</td><td class="py-0.5 font-medium">${esc(c.cedula||'—')}</td></tr>
+        </table>
+        <p class="text-xs text-slate-400 mt-1">No. orden + código + cédula identifican de forma única el procedimiento. No se puede agendar dos veces salvo que se cancele.</p></div>`
+    : '';
+  const html = `
+    ${claveHtml}
+    ${bloque('📄 Orden médica', c.doc_orden_datos, [['nombre_paciente','Nombre'],['cedula','Cédula'],['procedimiento','Procedimiento'],['numero_orden','No. orden'],['codigo_procedimiento','Código CUPS']])}
+    ${bloque('🧾 Autorización', c.doc_autorizacion_datos, [['nombre_paciente','Nombre'],['cedula','Cédula'],['eps','EPS'],['prestador','Prestador'],['procedimiento','Procedimiento'],['fecha','Fecha']])}
+    <p class="text-xs text-slate-400 mt-1">Datos leídos automáticamente por OCR al recibir los documentos. Contrástalos con la foto/PDF antes de confirmar la cita.</p>`;
+  openModal(`Datos OCR — Cita #${id}`, html, closeModal, 'Cerrar', 'btn-secondary');
+}
+
+async function confirmarCitaHospital(id, paciente) {
+  openConfirm(
+    `¿Confirmar la cita #${id} de ${paciente}?\n\nVerifica antes los documentos (📄 Orden y 📄 Autorización). Al confirmar, la cita pasa a "Agendada" y el paciente recibe la confirmación por WhatsApp.`,
+    async () => {
+      const r = await api('PUT', `/citas/${id}/confirmar`);
+      toast(r.whatsapp_enviado ? `Cita #${id} confirmada y notificada por WhatsApp` : `Cita #${id} confirmada (no se pudo enviar WhatsApp)`, r.whatsapp_enviado ? 'success' : 'info');
+      loadCitas();
+    },
+    '✅ Confirmar cita',
+    'btn-success'
+  );
+}
+
+async function marcarAsistencia(id, paciente) {
+  openConfirm(
+    `¿Confirmar que el paciente ${paciente} ASISTIÓ a la cita #${id}?\n\nLa cita quedará como "Completada".`,
+    async () => {
+      await api('PUT', `/citas/${id}/asistencia`);
+      toast(`Cita #${id} marcada como completada (asistió)`);
+      loadCitas();
+    },
+    '✅ Sí, asistió',
+    'btn-success'
+  );
+}
+
+async function cancelarCita(id, paciente) {
+  openConfirm(
+    `¿Cancelar la cita #${id} de ${paciente}?\n\nLa cita quedará en estado "cancelada" y el paciente recibirá un aviso por WhatsApp explicándole que puede volver a agendar.`,
+    async () => {
+      const r = await api('PUT', `/citas/${id}/cancelar`);
+      const msg = r.whatsapp_enviado
+        ? `Cita #${id} cancelada. Paciente notificado por WhatsApp.`
+        : `Cita #${id} cancelada (no se pudo enviar el WhatsApp al paciente).`;
+      toast(msg, r.whatsapp_enviado ? 'success' : 'info');
+      loadCitas();
+    },
+    'Cancelar Cita'
+  );
+}
+
+// Nota: el borrado de citas se retiró del panel. Solo se permite cancelar.
+// El reinicio masivo de citas (y de IDs) se hace con reset_sistema.py.
+
+// ─── Médicos ─────────────────────────────────────────────────────────────────
+
+const debouncedMedicos = debounce(loadMedicos, 400);
+
+async function loadMedicos() {
+  const p = new URLSearchParams();
+  const buscar=$('mf-buscar').value, esp=$('mf-esp').value, activo=$('mf-activo').value;
+  if(buscar) p.set('buscar',buscar);
+  if(esp)    p.set('id_especialidad',esp);
+  if(activo!=='') p.set('activo',activo);
+  $('medicos-body').innerHTML = '<tr><td colspan="6" class="text-center text-slate-400 py-10">Cargando…</td></tr>';
+  try {
+    const ms = await api('GET',`/medicos?${p}`);
+    G.medicos = ms;
+    tables.medicos.raw = ms;
+    redraw('medicos');
+    refreshSortIcons('medicos');
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+function renderMedicos(data) {
+  const rows = data.map(m => `
+    <tr>
+      <td class="font-mono text-slate-400">${m.id}</td>
+      <td class="font-medium">Dr(a). ${m.nombres} ${m.apellidos}</td>
+      <td class="font-mono text-sm text-slate-500">${m.registro_medico}</td>
+      <td>${m.especialidad}</td>
+      <td>${badgeActivo(m.activo)}</td>
+      <td class="flex flex-wrap gap-1 py-2">
+        <button class="btn btn-sm btn-secondary" onclick="abrirModalMedico(${m.id})">✏️ Editar</button>
+        <button class="btn btn-sm btn-secondary" onclick="irHorariosMedico(${m.id})">🕐 Horarios</button>
+        <button class="btn btn-sm ${m.activo?'btn-warning':'btn-success'}" onclick="toggleMedico(${m.id},${m.activo})">${m.activo?'Desactivar':'Activar'}</button>
+        <button class="btn btn-sm btn-danger" onclick="eliminarMedico(${m.id},'Dr(a). ${esc(m.nombres+' '+m.apellidos)}')">🗑</button>
+      </td>
+    </tr>`).join('');
+  $('medicos-body').innerHTML = rows || '<tr><td colspan="6" class="text-center text-slate-400 py-10">No se encontraron médicos</td></tr>';
+}
+
+function abrirModalMedico(id=null) {
+  const m = id ? G.medicos.find(x=>x.id===id) : null;
+  const espOpts = G.esps.map(e=>`<option value="${e.id}" ${m&&m.id_especialidad===e.id?'selected':''}>${e.nombre}</option>`).join('');
+  // Al crear, el registro se asigna automáticamente (campo solo lectura).
+  const regField = id
+    ? `<input id="m-reg" type="text" value="${esc(m.registro_medico)}" placeholder="Ej: RM-001">`
+    : `<input id="m-reg" type="text" value="Asignando…" disabled style="background:#f8fafc">
+       <div class="text-xs text-slate-400 mt-1">Se asigna automáticamente el menor número disponible.</div>`;
+  const html = `
+    <div class="grid grid-cols-2 gap-x-4">
+      <div class="form-group"><label>Nombres *</label><input id="m-nombres" type="text" value="${m?esc(m.nombres):''}" placeholder="Nombres"></div>
+      <div class="form-group"><label>Apellidos *</label><input id="m-apellidos" type="text" value="${m?esc(m.apellidos):''}" placeholder="Apellidos"></div>
+    </div>
+    <div class="form-group"><label>Número de Registro Médico${id?' *':' (automático)'}</label>${regField}</div>
+    <div class="form-group"><label>Especialidad *</label><select id="m-esp"><option value="">Seleccionar…</option>${espOpts}</select></div>
+    <div class="flex items-center gap-3 mt-1">
+      <label class="toggle"><input id="m-activo" type="checkbox" ${!m||m.activo?'checked':''}><span class="toggle-track"></span></label>
+      <span class="text-sm text-slate-600">Médico activo</span>
+    </div>`;
+  openModal(id?'Editar Médico':'Agregar Médico', html, async () => {
+    const nombres=$('m-nombres').value.trim(), apellidos=$('m-apellidos').value.trim();
+    const id_esp=parseInt($('m-esp').value), activo=$('m-activo').checked;
+    if(!nombres||!apellidos||!id_esp) throw new Error('Completa nombres, apellidos y especialidad');
+    if(id) {
+      const reg=$('m-reg').value.trim();
+      if(!reg) throw new Error('El número de registro es obligatorio');
+      await api('PUT',`/medicos/${id}`,{nombres,apellidos,registro_medico:reg,id_especialidad:id_esp,activo});
+      toast('Médico actualizado');
+    } else {
+      // El registro lo asigna el servidor automáticamente
+      const r = await api('POST','/medicos',{nombres,apellidos,id_especialidad:id_esp,activo});
+      toast(`Médico agregado · Registro ${r.registro_medico}`);
+    }
+    closeModal(); await refreshCache(); loadMedicos();
+  });
+  // Para creación: traer y mostrar el siguiente registro disponible
+  if(!id){
+    api('GET','/medicos/siguiente_registro')
+      .then(r=>{ const el=$('m-reg'); if(el) el.value=r.registro_medico; })
+      .catch(()=>{ const el=$('m-reg'); if(el) el.value='(automático)'; });
+  }
+}
+
+async function toggleMedico(id, activo) {
+  try { await api('PUT',`/medicos/${id}`,{activo:!activo}); toast(activo?'Médico desactivado':'Médico activado'); await refreshCache(); loadMedicos(); }
+  catch(e) { toast(e.message,'error'); }
+}
+async function eliminarMedico(id, nombre) {
+  openConfirm(`¿Eliminar a ${nombre}? Se eliminarán también sus horarios.`, async()=>{
+    await api('DELETE',`/medicos/${id}`); toast('Médico eliminado'); await refreshCache(); loadMedicos();
+  });
+}
+function irHorariosMedico(id) {
+  go('horarios');
+  const m = G.medicos.find(x => x.id === id);
+  setTimeout(() => {
+    if (m && m.id_especialidad) $('hf-esp').value = m.id_especialidad;
+    _horExpand.clear(); _horExpand.add(id);   // abrir solo este médico
+    loadHorarios();
+  }, 80);
+}
+
+// ─── Pacientes ───────────────────────────────────────────────────────────────
+
+const debouncedPacientes = debounce(loadPacientes, 400);
+
+async function loadPacientes() {
+  const buscar = $('pf-buscar').value;
+  const p = new URLSearchParams();
+  if(buscar) p.set('buscar',buscar);
+  $('pac-body').innerHTML = '<tr><td colspan="8" class="text-center text-slate-400 py-10">Cargando…</td></tr>';
+  try {
+    const d = await api('GET',`/pacientes?${p}`);
+    $('pac-counter').textContent = `${d.total} paciente(s)`;
+    tables.pacientes.raw = d.items;
+    redraw('pacientes');
+    refreshSortIcons('pacientes');
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+function renderPacientes(data) {
+  const rows = data.map(p => `
+    <tr>
+      <td class="font-mono text-slate-400">${p.id}</td>
+      <td class="font-medium">${p.nombres} ${p.apellidos}</td>
+      <td class="font-mono text-sm">${p.cedula}</td>
+      <td>${p.celular}</td>
+      <td class="text-slate-500 text-sm">${p.correo||'—'}</td>
+      <td class="text-slate-500 text-sm">${p.eps||'—'}</td>
+      <td class="text-slate-500 text-sm font-mono">${p.created_at||'—'}</td>
+      <td class="text-center font-medium">${p.total_citas}</td>
+      <td class="flex flex-wrap gap-1 py-1">
+        <button class="btn btn-sm btn-secondary" onclick="abrirModalPaciente(${p.id})">✏️ Editar</button>
+        <button class="btn btn-sm btn-danger" onclick="eliminarPaciente(${p.id},'${esc(p.nombres+' '+p.apellidos)}')">🗑</button>
+      </td>
+    </tr>`).join('');
+  $('pac-body').innerHTML = rows || '<tr><td colspan="9" class="text-center text-slate-400 py-10">No se encontraron pacientes</td></tr>';
+}
+
+function abrirModalPaciente(id) {
+  const p = tables.pacientes.raw.find(x=>x.id===id);
+  if(!p) { toast('Paciente no encontrado','error'); return; }
+  const html = `
+    <div class="grid grid-cols-2 gap-x-4">
+      <div class="form-group"><label>Nombres *</label><input id="p-nombres" type="text" value="${esc(p.nombres)}" placeholder="Nombres"></div>
+      <div class="form-group"><label>Apellidos *</label><input id="p-apellidos" type="text" value="${esc(p.apellidos)}" placeholder="Apellidos"></div>
+    </div>
+    <div class="form-group"><label>Cédula *</label><input id="p-cedula" type="text" value="${esc(p.cedula)}" placeholder="Número de cédula"></div>
+    <div class="grid grid-cols-2 gap-x-4">
+      <div class="form-group"><label>Celular *</label><input id="p-celular" type="text" value="${esc(p.celular)}" placeholder="Celular"></div>
+      <div class="form-group"><label>Correo electrónico</label><input id="p-correo" type="email" value="${esc(p.correo||'')}" placeholder="correo@ejemplo.com"></div>
+    </div>
+    <div class="form-group"><label>EPS</label>
+      <select id="p-eps">
+        <option value="">— Sin EPS —</option>
+        ${G.epsList.map(e=>`<option value="${e.id}" ${p.id_eps===e.id?'selected':''}>${esc(e.nombre)}</option>`).join('')}
+      </select>
+    </div>
+    <p class="text-xs text-slate-400 mt-1">⚠️ Si cambias la cédula el paciente deberá usarla nueva la próxima vez en el chatbot. La EPS determina qué documentos se le piden al agendar.</p>`;
+  openModal(`Editar Paciente — ${p.nombres} ${p.apellidos}`, html, async () => {
+    const nombres=$('p-nombres').value.trim(), apellidos=$('p-apellidos').value.trim();
+    const cedula=$('p-cedula').value.trim(), celular=$('p-celular').value.trim();
+    const correo=$('p-correo').value.trim();
+    const id_eps=$('p-eps').value ? parseInt($('p-eps').value) : null;
+    if(!nombres||!apellidos||!cedula||!celular) throw new Error('Nombres, apellidos, cédula y celular son obligatorios');
+    await api('PUT',`/pacientes/${id}`,{nombres,apellidos,cedula,celular,correo:correo||null,id_eps});
+    toast('Datos del paciente actualizados');
+    closeModal(); loadPacientes();
+  });
+}
+
+async function eliminarPaciente(id, nombre) {
+  openConfirm(`¿Eliminar definitivamente al paciente ${nombre}?\n\nSe eliminarán también todas sus citas. Esta acción no se puede deshacer.`, async () => {
+    await api('DELETE',`/pacientes/${id}`);
+    toast(`Paciente eliminado. Contador de IDs reiniciado.`);
+    loadPacientes();
+  }, 'Eliminar Paciente');
+}
+
+// ─── Especialidades ──────────────────────────────────────────────────────────
+
+async function loadEsps() {
+  $('esp-body').innerHTML = '<tr><td colspan="6" class="text-center text-slate-400 py-10">Cargando…</td></tr>';
+  try {
+    const data = await api('GET','/especialidades');
+    G.esps = data;
+    tables.especialidades.raw = data;
+    redraw('especialidades');
+    refreshSortIcons('especialidades');
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+function renderEsps(data) {
+  const rows = data.map(e => `
+    <tr>
+      <td class="font-mono text-slate-400">${e.id}</td>
+      <td class="font-medium">${e.nombre}</td>
+      <td class="text-slate-500 text-sm" style="max-width:220px;white-space:normal">${e.descripcion||'—'}</td>
+      <td class="text-center">${e.total_medicos}</td>
+      <td>${toggle(e.id,e.activo,'toggleEsp')}</td>
+      <td class="flex gap-1 py-2">
+        <button class="btn btn-sm btn-secondary" onclick="abrirModalEsp(${e.id})">✏️ Editar</button>
+        <button class="btn btn-sm btn-danger" onclick="eliminarEsp(${e.id},'${esc(e.nombre)}')">🗑</button>
+      </td>
+    </tr>`).join('');
+  $('esp-body').innerHTML = rows || '<tr><td colspan="6" class="text-center text-slate-400 py-10">Sin especialidades</td></tr>';
+}
+
+async function toggleEsp(id, activo) {
+  try { await api('PUT',`/especialidades/${id}`,{activo}); toast(activo?'Activada en el bot':'Desactivada del bot'); await refreshCache(); }
+  catch(e) { toast(e.message,'error'); loadEsps(); }
+}
+
+function abrirModalEsp(id=null) {
+  const e = id ? G.esps.find(x=>x.id===id) : null;
+  const html = `
+    <div class="form-group"><label>Nombre *</label><input id="e-nombre" type="text" value="${e?esc(e.nombre):''}" placeholder="Ej: Cardiología"></div>
+    <div class="form-group"><label>Descripción</label><textarea id="e-desc" rows="3" placeholder="Descripción opcional…">${e?esc(e.descripcion||''):''}</textarea></div>
+    <div class="flex items-center gap-3 mt-1">
+      <label class="toggle"><input id="e-activo" type="checkbox" ${!e||e.activo?'checked':''}><span class="toggle-track"></span></label>
+      <span class="text-sm text-slate-600">Visible en el chatbot de WhatsApp</span>
+    </div>`;
+  openModal(id?'Editar Especialidad':'Nueva Especialidad', html, async () => {
+    const nombre=$('e-nombre').value.trim(), desc=$('e-desc').value.trim(), activo=$('e-activo').checked;
+    if(!nombre) throw new Error('El nombre es obligatorio');
+    if(id) { await api('PUT',`/especialidades/${id}`,{nombre,descripcion:desc||null,activo}); toast('Especialidad actualizada'); }
+    else   { await api('POST','/especialidades',{nombre,descripcion:desc||null,activo}); toast('Especialidad creada'); }
+    closeModal(); await refreshCache(); loadEsps();
+  });
+}
+
+async function eliminarEsp(id, nombre) {
+  openConfirm(`¿Eliminar la especialidad "${nombre}"?`, async()=>{
+    await api('DELETE',`/especialidades/${id}`); toast('Especialidad eliminada'); await refreshCache(); loadEsps();
+  });
+}
+
+// ─── EPS ───────────────────────────────────────────────────────────────────────
+
+async function loadEpsList() {
+  $('eps-body').innerHTML = '<tr><td colspan="7" class="text-center text-slate-400 py-10">Cargando…</td></tr>';
+  try {
+    const data = await api('GET','/eps');
+    G.epsList = data;
+    tables.eps.raw = data;
+    redraw('eps');
+    refreshSortIcons('eps');
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+function renderEpsList(data) {
+  const rows = data.map(e => `
+    <tr>
+      <td class="font-mono text-slate-400">${e.id}</td>
+      <td class="font-medium">${e.nombre}</td>
+      <td class="text-center">${toggle(e.id,e.requiere_orden,'toggleEpsOrden')}</td>
+      <td class="text-center">${toggle(e.id,e.requiere_autorizacion,'toggleEpsAuth')}</td>
+      <td class="text-center">${toggle(e.id,e.autorizacion_opcional,'toggleEpsAuthOpc')}</td>
+      <td class="text-center">${e.total_pacientes}</td>
+      <td>${toggle(e.id,e.activo,'toggleEpsActivo')}</td>
+      <td class="flex gap-1 py-2">
+        <button class="btn btn-sm btn-secondary" onclick="abrirModalEpsItem(${e.id})">✏️ Editar</button>
+        <button class="btn btn-sm btn-danger" onclick="eliminarEpsItem(${e.id},'${esc(e.nombre)}')">🗑</button>
+      </td>
+    </tr>`).join('');
+  $('eps-body').innerHTML = rows || '<tr><td colspan="8" class="text-center text-slate-400 py-10">Sin EPS</td></tr>';
+}
+
+async function _updateEps(id, body, msg) {
+  try { await api('PUT',`/eps/${id}`, body); toast(msg); await refreshCache(); loadEpsList(); }
+  catch(e) { toast(e.message,'error'); loadEpsList(); }
+}
+async function toggleEpsOrden(id, val)   { await _updateEps(id,{requiere_orden:val},        val?'Ahora exige orden médica':'Ya no exige orden médica'); }
+async function toggleEpsAuth(id, val)    { await _updateEps(id,{requiere_autorizacion:val}, val?'Ahora exige autorización':'Ya no exige autorización'); }
+async function toggleEpsAuthOpc(id, val) { await _updateEps(id,{autorizacion_opcional:val}, val?'Autorización ahora es opcional':'Autorización obligatoria'); }
+async function toggleEpsActivo(id, val)  { await _updateEps(id,{activo:val},                val?'EPS activada':'EPS desactivada'); }
+
+function abrirModalEpsItem(id=null) {
+  const e = id ? G.epsList.find(x=>x.id===id) : null;
+  const html = `
+    <div class="form-group"><label>Nombre *</label><input id="eps-nombre" type="text" value="${e?esc(e.nombre):''}" placeholder="Ej: Nueva EPS"></div>
+    <label class="block text-sm font-medium text-slate-700 mb-2">Documentos que exige al agendar</label>
+    <div class="flex items-center gap-3 mb-2">
+      <label class="toggle"><input id="eps-orden" type="checkbox" ${!e||e.requiere_orden?'checked':''}><span class="toggle-track"></span></label>
+      <span class="text-sm text-slate-600">📄 Orden médica</span>
+    </div>
+    <div class="flex items-center gap-3 mb-2">
+      <label class="toggle"><input id="eps-auth" type="checkbox" ${!e||e.requiere_autorizacion?'checked':''}><span class="toggle-track"></span></label>
+      <span class="text-sm text-slate-600">🧾 Autorización de la cita</span>
+    </div>
+    <div class="flex items-center gap-3 mb-2 ml-6">
+      <label class="toggle"><input id="eps-authopc" type="checkbox" ${e&&e.autorizacion_opcional?'checked':''}><span class="toggle-track"></span></label>
+      <span class="text-sm text-slate-600">↳ Autorización <b>opcional</b> (se pide pero puede continuar sin ella)</span>
+    </div>
+    <div class="flex items-center gap-3 mt-3 pt-3" style="border-top:1px solid #f1f5f9">
+      <label class="toggle"><input id="eps-activo" type="checkbox" ${!e||e.activo?'checked':''}><span class="toggle-track"></span></label>
+      <span class="text-sm text-slate-600">Activa (aparece en el registro del chatbot)</span>
+    </div>`;
+  openModal(id?'Editar EPS':'Nueva EPS', html, async () => {
+    const nombre=$('eps-nombre').value.trim();
+    if(!nombre) throw new Error('El nombre es obligatorio');
+    const body={
+      nombre,
+      requiere_orden:$('eps-orden').checked,
+      requiere_autorizacion:$('eps-auth').checked,
+      autorizacion_opcional:$('eps-authopc').checked,
+      activo:$('eps-activo').checked,
+    };
+    if(id){ await api('PUT',`/eps/${id}`,body); toast('EPS actualizada'); }
+    else  { await api('POST','/eps',body); toast('EPS creada'); }
+    closeModal(); await refreshCache(); loadEpsList();
+  });
+}
+
+async function eliminarEpsItem(id, nombre) {
+  openConfirm(`¿Eliminar la EPS "${nombre}"?`, async()=>{
+    await api('DELETE',`/eps/${id}`); toast('EPS eliminada'); await refreshCache(); loadEpsList();
+  });
+}
+
+// ─── Métricas (satisfacción y tiempos) ─────────────────────────────────────────
+
+function fmtDur(seg) {
+  if (seg == null) return '—';
+  if (seg < 60) return seg + 's';
+  const m = Math.floor(seg / 60), s = seg % 60;
+  return m + 'm ' + (s < 10 ? '0' : '') + s + 's';
+}
+
+async function loadMetricas() {
+  try {
+    const d = await api('GET', '/metricas');
+    const sat = d.satisfaccion, t = d.tiempos, tc = d.tiempo_confirmacion;
+
+    // Resumen de satisfacción
+    const prom = sat.promedio != null ? sat.promedio.toFixed(1) : '—';
+    const estrellas = sat.promedio != null ? '⭐'.repeat(Math.round(sat.promedio)) : '';
+    $('m-sat-resumen').innerHTML =
+      `<div style="font-size:32px;font-weight:800;color:#1e293b;line-height:1">${prom} <span style="font-size:22px">${estrellas}</span></div>
+       <div class="text-sm text-slate-500 mt-1">${sat.total} calificación(es)</div>`;
+
+    // Distribución 5→1
+    const maxD = Math.max(1, ...Object.values(sat.distribucion));
+    let dist = '';
+    for (let i = 5; i >= 1; i--) {
+      const c = sat.distribucion[i] || 0;
+      const pct = Math.round(c / maxD * 100);
+      dist += `<div class="flex items-center gap-2 mb-1" style="font-size:13px">
+        <span style="width:78px">${'⭐'.repeat(i)}</span>
+        <div style="flex:1;background:#f1f5f9;border-radius:6px;overflow:hidden;height:14px">
+          <div style="width:${pct}%;background:#f59e0b;height:100%"></div></div>
+        <span style="width:26px;text-align:right;color:#64748b">${c}</span></div>`;
+    }
+    $('m-sat-distrib').innerHTML = dist;
+
+    // Tiempos de agendamiento (chatbot)
+    $('m-tiempos').innerHTML =
+      `<div style="font-size:32px;font-weight:800;color:#1e293b;line-height:1">${fmtDur(t.promedio_seg)}</div>
+       <div class="text-sm text-slate-500 mt-1 mb-3">promedio · ${t.total} agendamiento(s)</div>
+       <div class="flex gap-5 text-sm">
+         <div><span class="text-slate-400">Mínimo:</span> <b>${fmtDur(t.min_seg)}</b></div>
+         <div><span class="text-slate-400">Máximo:</span> <b>${fmtDur(t.max_seg)}</b></div>
+       </div>`;
+
+    // Tiempos de confirmación (personal administrativo)
+    $('m-confirmacion').innerHTML =
+      `<div style="font-size:32px;font-weight:800;color:#1e293b;line-height:1">${fmtDur(tc.promedio_seg)}</div>
+       <div class="text-sm text-slate-500 mt-1 mb-3">promedio · ${tc.total} confirmación(es)</div>
+       <div class="flex gap-5 text-sm">
+         <div><span class="text-slate-400">Mínimo:</span> <b>${fmtDur(tc.min_seg)}</b></div>
+         <div><span class="text-slate-400">Máximo:</span> <b>${fmtDur(tc.max_seg)}</b></div>
+       </div>`;
+
+    // Recientes
+    const rows = d.recientes.map(m => `<tr>
+      <td class="font-mono text-slate-400">${m.id_cita ? ('#' + m.id_cita) : '—'}</td>
+      <td class="font-medium">${esc(m.paciente)}</td>
+      <td>${m.estrellas ? ('⭐'.repeat(m.estrellas) + ' <span class="text-slate-400 text-xs">(' + m.estrellas + ')</span>') : '<span class="text-slate-400 text-sm">sin calificar</span>'}</td>
+      <td class="font-mono text-sm">${fmtDur(m.duracion_seg)}</td>
+      <td class="font-mono text-sm">${fmtDur(m.tiempo_confirmacion_seg)}</td>
+      <td class="text-slate-500 text-sm font-mono">${m.fecha || '—'}</td>
+    </tr>`).join('');
+    $('m-recientes').innerHTML = rows || '<tr><td colspan="6" class="text-center text-slate-400 py-10">Aún no hay agendamientos registrados</td></tr>';
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ─── Fechas ───────────────────────────────────────────────────────────────────
+
+async function loadFechas() {
+  $('fechas-body').innerHTML = '<tr><td colspan="6" class="text-center text-slate-400 py-10">Cargando…</td></tr>';
+  try {
+    const data = await api('GET','/fechas');
+    tables.fechas.raw = data;
+    redraw('fechas');
+    refreshSortIcons('fechas');
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+function renderFechas(data) {
+  const rows = data.map(f => {
+    const total   = f.slots_totales || 0;
+    const ocup    = f.slots_ocupados || 0;
+    const libres  = f.slots_libres   || 0;
+    const medicos = f.medicos        || 0;
+    const colorLibres = libres === 0
+      ? 'text-red-600'
+      : (libres < total * 0.3 ? 'text-orange-600' : 'text-green-700');
+    // Sin slots ni médicos → fecha "huérfana" (herencia de la generación
+    // automática antigua), la marcamos con un badge de aviso.
+    const huerfana = total === 0 && ocup === 0;
+    return `
+    <tr${huerfana ? ' style="background:#fefce8"' : ''}>
+      <td class="font-mono text-slate-400">${f.id}</td>
+      <td class="font-mono font-medium">${fmt(f.fecha)}</td>
+      <td class="text-slate-500">${f.dia}</td>
+      <td class="text-center font-medium">
+        ${medicos > 0
+          ? `<span class="text-slate-700">${medicos}</span>`
+          : `<span class="text-slate-400 text-xs">—</span>`}
+      </td>
+      <td class="text-center font-medium" title="${libres} libre(s) · ${ocup} ocupado(s) · ${total} total(es)">
+        ${total > 0
+          ? `<span class="${colorLibres}">${libres}</span>
+             <span class="text-slate-400 text-xs">/ ${ocup} / ${total}</span>`
+          : (huerfana
+              ? `<span class="text-yellow-700 text-xs" title="Fecha sin horarios ni citas: candidata a limpiar">⚠️ sin horarios</span>`
+              : `<span class="text-slate-400 text-xs">—</span>`)}
+      </td>
+      <td>${toggle(f.id,f.activo,'toggleFecha')}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="eliminarFecha(${f.id},'${f.fecha}')">🗑 Eliminar</button></td>
+    </tr>`;
+  }).join('');
+  $('fechas-body').innerHTML = rows || '<tr><td colspan="7" class="text-center text-slate-400 py-10">No hay fechas registradas</td></tr>';
+}
+
+async function limpiarFechasHuerfanas() {
+  openConfirm(
+    'Se hará una limpieza y sincronización de la tabla de fechas:\n\n' +
+    '  1. Se eliminarán fechas SIN horarios ni citas (herencia de la generación automática antigua).\n' +
+    '  2. Se agregarán fechas que tienen horarios cargados pero no estaban registradas.\n' +
+    '  3. Se compactarán los IDs (1, 2, 3, …).\n\n' +
+    '¿Continuar?',
+    async () => {
+      const r = await api('POST', '/fechas/limpiar-huerfanas');
+      toast(
+        `🧹 ${r.borradas} borrada(s) · ${r.agregadas_por_sincronia} agregada(s) · total ahora: ${r.total_actual}`,
+        'success'
+      );
+      loadFechas();
+    },
+    '🧹 Limpiar y sincronizar'
+  );
+}
+
+function abrirModalFecha() {
+  const hoy = new Date().toISOString().slice(0,10);
+  const html = `
+    <div class="form-group"><label>Fecha *</label><input id="f-fecha" type="date" value="${hoy}" min="${hoy}"></div>
+    <div class="form-group"><label>Cupos disponibles</label><input id="f-cupos" type="number" value="50" min="1" max="999"></div>
+    <div class="flex items-center gap-3 mt-1">
+      <label class="toggle"><input id="f-activo" type="checkbox" checked><span class="toggle-track"></span></label>
+      <span class="text-sm text-slate-600">Fecha activa</span>
+    </div>`;
+  openModal('Agregar Fecha Disponible', html, async () => {
+    const fecha=$('f-fecha').value, cupos=parseInt($('f-cupos').value)||50, activo=$('f-activo').checked;
+    if(!fecha) throw new Error('Selecciona una fecha');
+    await api('POST','/fechas',{fecha,cupos_disponibles:cupos,activo});
+    toast('Fecha agregada'); closeModal(); loadFechas();
+  });
+}
+
+async function toggleFecha(id, activo) {
+  try { await api('PUT',`/fechas/${id}`,{activo}); }
+  catch(e) { toast(e.message,'error'); loadFechas(); }
+}
+
+async function eliminarFecha(id, fecha) {
+  openConfirm(`¿Eliminar la fecha ${fmt(fecha)}?`, async()=>{
+    await api('DELETE',`/fechas/${id}`); toast('Fecha eliminada'); loadFechas();
+  });
+}
+
+// ─── Cargar horarios semanales por Excel ───────────────────────────────────
+// Flujo en 2 pasos:
+//   1) el personal elige el LUNES de la semana + sube el .xlsx
+//      → POST /horarios/cargar-preview  → JSON con el detalle
+//   2) el personal revisa/edita el preview y guarda
+//      → POST /horarios/aplicar         → INSERT idempotente
+
+let _cargaPreview = null;   // resultado del paso 1 (para el paso 2)
+let _cargaFile    = null;   // File seleccionado
+
+function abrirModalCargarHorarios() {
+  // Sugerir el próximo lunes como fecha por defecto.
+  const hoy = new Date();
+  const dow = (hoy.getDay() + 6) % 7;                     // 0 = lunes
+  const lunesProx = new Date(hoy);
+  lunesProx.setDate(hoy.getDate() + (7 - dow));           // el próximo lunes
+  $('carga-fecha-lunes').value = lunesProx.toISOString().slice(0, 10);
+  cargaActualizarHint();
+
+  // Reset UI del modal
+  $('carga-file').value = '';
+  $('carga-file-name').textContent = '';
+  _cargaFile = null;
+  _cargaPreview = null;
+  $('carga-paso1').style.display = '';
+  $('carga-paso2').style.display = 'none';
+
+  // Mostrar el modal
+  const ov = $('carga-overlay');
+  ov.style.setProperty('display', 'flex', 'important');
+}
+
+function cerrarModalCargarHorarios() {
+  $('carga-overlay').style.setProperty('display', 'none', 'important');
+}
+
+function cargaActualizarHint() {
+  const v = $('carga-fecha-lunes').value;
+  const hint = $('carga-fecha-hint');
+  if (!v) { hint.textContent = ''; return; }
+  const d = new Date(v + 'T00:00:00');
+  const dias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  if (d.getDay() !== 1) {
+    hint.textContent = `⚠️ La fecha elegida es ${dias[d.getDay()]}. Debe ser un LUNES.`;
+    hint.style.color = '#dc2626';
+  } else {
+    const domingo = new Date(d); domingo.setDate(d.getDate() + 6);
+    hint.textContent = `Semana ${fmt(v)} → ${fmt(domingo.toISOString().slice(0,10))}`;
+    hint.style.color = '#64748b';
+  }
+}
+
+// Manejo del drag & drop + input tradicional
+(function initCargaDnD() {
+  const drop = document.getElementById('carga-drop');
+  const file = document.getElementById('carga-file');
+  if (!drop || !file) return;
+  file.addEventListener('change', e => {
+    if (e.target.files.length) cargaSetFile(e.target.files[0]);
+  });
+  document.getElementById('carga-fecha-lunes')?.addEventListener('change', cargaActualizarHint);
+  ['dragenter','dragover'].forEach(ev =>
+    drop.addEventListener(ev, e => { e.preventDefault(); drop.style.background='#eef4ff'; drop.style.borderColor='#3b82f6'; }));
+  ['dragleave','drop'].forEach(ev =>
+    drop.addEventListener(ev, e => { e.preventDefault(); drop.style.background='#fafcff'; drop.style.borderColor='#cbd5e1'; }));
+  drop.addEventListener('drop', e => {
+    if (e.dataTransfer.files.length) cargaSetFile(e.dataTransfer.files[0]);
+  });
+})();
+
+function cargaSetFile(f) {
+  if (!f.name.toLowerCase().endsWith('.xlsx')) {
+    toast('El archivo debe ser .xlsx', 'error');
+    return;
+  }
+  _cargaFile = f;
+  $('carga-file-name').textContent = `📎 ${f.name} (${(f.size/1024).toFixed(1)} KB)`;
+}
+
+async function cargaAnalizarExcel() {
+  const fecha = $('carga-fecha-lunes').value;
+  if (!fecha) { toast('Elige la fecha del lunes', 'error'); return; }
+  if (new Date(fecha + 'T00:00:00').getDay() !== 1) {
+    toast('La fecha elegida no es un lunes', 'error'); return;
+  }
+  if (!_cargaFile) { toast('Selecciona un archivo .xlsx', 'error'); return; }
+
+  const btn = $('carga-btn-analizar');
+  btn.disabled = true; btn.textContent = '⏳ Analizando…';
+  try {
+    const fd = new FormData();
+    fd.append('archivo', _cargaFile);
+    fd.append('fecha_lunes', fecha);
+    const res = await fetch('/admin/horarios/cargar-preview', {
+      method: 'POST', body: fd, credentials: 'include'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    _cargaPreview = await res.json();
+    cargaMostrarPreview();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Analizar archivo';
+  }
+}
+
+function cargaMostrarPreview() {
+  const p = _cargaPreview;
+  // Construir el resumen
+  const nMed  = p.medicos.length;
+  const nSlot = p.total_slots;
+  const ignoradas = p.filas_ignoradas || [];
+  const dup   = p.duplicados || [];
+  const conf  = p.conflictos_citas || [];
+
+  let resumen = `<div class="p-3 rounded" style="background:#eff6ff;border-left:3px solid #3b82f6">`;
+  resumen += `<div class="text-sm"><b>Semana:</b> ${fmt(p.fecha_lunes)} → ${fmt(p.fecha_domingo)}</div>`;
+  resumen += `<div class="text-sm mt-1"><b>Detectado:</b> ${nSlot} horario(s) para ${nMed} médico(s)</div>`;
+  resumen += `</div>`;
+
+  if (ignoradas.length) {
+    resumen += `<div class="p-3 rounded mt-2" style="background:#fef3c7;border-left:3px solid #f59e0b">`;
+    resumen += `<div class="text-sm font-medium">⚠️ ${ignoradas.length} nombre(s) del Excel no coinciden con médicos activos (se ignoran):</div>`;
+    resumen += `<div class="text-xs text-slate-600 mt-1">` + ignoradas.map(x => esc(x)).join(' · ') + `</div></div>`;
+  }
+  if (dup.length) {
+    resumen += `<div class="p-3 rounded mt-2" style="background:#f1f5f9;border-left:3px solid #94a3b8">`;
+    resumen += `<div class="text-sm">ℹ️ ${dup.length} slot(s) ya existen en la BD (se ignorarán al guardar).</div></div>`;
+  }
+  if (conf.length) {
+    resumen += `<div class="p-3 rounded mt-2" style="background:#fee2e2;border-left:3px solid #dc2626">`;
+    resumen += `<div class="text-sm font-medium">⛔ ${conf.length} slot(s) chocan con citas YA agendadas — revísalos abajo antes de guardar.</div></div>`;
+  }
+  $('carga-resumen').innerHTML = resumen;
+
+  // Aplanar preview a filas editables
+  const conflictosSet = new Set(conf.map(c => `${c.id_medico}|${c.fecha}|${c.hora}`));
+  const filas = [];
+  for (const m of p.medicos) {
+    for (const s of m.slots) {
+      filas.push({
+        id_medico: m.id_medico,
+        nombre: m.nombre,
+        especialidad: m.especialidad,
+        fecha: s.fecha,
+        hora: s.hora,
+        conflicto: conflictosSet.has(`${m.id_medico}|${s.fecha}|${s.hora}`),
+      });
+    }
+  }
+  filas.sort((a,b) => (a.fecha+a.hora+a.nombre).localeCompare(b.fecha+b.hora+b.nombre));
+  window._cargaFilas = filas;
+  cargaRenderPreview();
+
+  // Cambiar de paso
+  $('carga-paso1').style.display = 'none';
+  $('carga-paso2').style.display = '';
+}
+
+function cargaRenderPreview() {
+  const filas = window._cargaFilas || [];
+  const tbody = $('carga-preview-body');
+  if (!filas.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-slate-400 py-8">Sin horarios (todos eliminados)</td></tr>`;
+    $('carga-btn-guardar').disabled = true;
+    return;
+  }
+  $('carga-btn-guardar').disabled = false;
+  tbody.innerHTML = filas.map((f, i) => `
+    <tr${f.conflicto ? ' style="background:#fee2e2"' : ''}>
+      <td class="font-medium">${esc(f.nombre)}${f.conflicto ? ' <span class="text-xs text-red-600">⛔ choca con cita</span>' : ''}</td>
+      <td class="text-slate-500 text-sm">${esc(f.especialidad || '—')}</td>
+      <td><input type="date" value="${f.fecha}" onchange="cargaFilaEditar(${i},'fecha',this.value)" style="padding:3px 6px;font-size:12px"></td>
+      <td><input type="time" value="${f.hora}" onchange="cargaFilaEditar(${i},'hora',this.value)" style="padding:3px 6px;font-size:12px"></td>
+      <td><button class="btn btn-sm btn-danger" onclick="cargaFilaEliminar(${i})">🗑</button></td>
+    </tr>
+  `).join('');
+}
+
+function cargaFilaEditar(idx, campo, valor) {
+  const filas = window._cargaFilas || [];
+  if (filas[idx]) { filas[idx][campo] = valor; filas[idx].conflicto = false; }
+}
+function cargaFilaEliminar(idx) {
+  const filas = window._cargaFilas || [];
+  filas.splice(idx, 1);
+  cargaRenderPreview();
+}
+function cargaVolver() {
+  $('carga-paso2').style.display = 'none';
+  $('carga-paso1').style.display = '';
+}
+
+async function cargaGuardar() {
+  const filas = window._cargaFilas || [];
+  if (!filas.length) { toast('No hay slots para guardar', 'error'); return; }
+  const conflictos = filas.filter(f => f.conflicto);
+  if (conflictos.length) {
+    if (!confirm(`Hay ${conflictos.length} slot(s) que chocan con citas ya agendadas. Se guardarán solo los que no choquen. ¿Continuar?`)) return;
+  }
+  const btn = $('carga-btn-guardar');
+  btn.disabled = true; btn.textContent = '⏳ Guardando…';
+  try {
+    const slots = filas
+      .filter(f => !f.conflicto)
+      .map(f => ({ id_medico: f.id_medico, fecha: f.fecha, hora: f.hora }));
+    const r = await api('POST', '/horarios/aplicar', { slots });
+    toast(
+      `✅ ${r.slots_creados} slot(s) creado(s) · ${r.slots_ya_existentes} ya existían · ${r.fechas_registradas} fecha(s) nuevas`,
+      'success'
+    );
+    cerrarModalCargarHorarios();
+    loadFechas();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '✅ Guardar horarios';
+  }
+}
+
+// ─── Horarios ────────────────────────────────────────────────────────────────
+
+let _horData = [];
+let _horExpand = new Set();          // médicos expandidos (solo uno a la vez)
+let _horPending = {};                // id_horario -> { activo?, eliminar? } (cambios sin guardar)
+const DIAS_ABBR = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+async function loadHorarios() {
+  const id_esp = $('hf-esp').value;
+  const p = new URLSearchParams();
+  if (id_esp) p.set('id_especialidad', id_esp);
+  $('hor-acc').innerHTML = '<div class="card p-8 text-center text-slate-400">Cargando…</div>';
+  try {
+    _horData = await api('GET', `/horarios?${p}`);
+    _horPending = {};   // al recargar datos frescos se descartan cambios sin guardar
+    renderHorarios(_horData);
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// Solo un médico expandido a la vez: al abrir uno se contraen los demás.
+function toggleHorMedico(id) {
+  if (_horExpand.has(id)) _horExpand.delete(id);
+  else { _horExpand.clear(); _horExpand.add(id); }
+  renderHorarios(_horData);
+}
+
+// ── Helpers de cambios pendientes (staging) ──
+function _origHorario(id) { return _horData.find(h => h.id === id); }
+function _horEliminar(id) { const p = _horPending[id]; return !!(p && p.eliminar); }
+function _horActivoActual(h) {
+  const p = _horPending[h.id];
+  return (p && p.activo !== undefined) ? p.activo : h.activo;
+}
+function _horCambiado(id) {
+  const p = _horPending[id]; if (!p) return false;
+  const o = _origHorario(id); if (!o) return false;
+  if (p.eliminar) return true;
+  if (p.activo !== undefined && p.activo !== o.activo) return true;
+  return false;
+}
+function _pendCount(medId) {
+  return _horData.filter(h => h.id_medico === medId && _horCambiado(h.id)).length;
+}
+function _limpiarPend(id) {
+  const p = _horPending[id], o = _origHorario(id);
+  if (p && !p.eliminar && (p.activo === undefined || (o && p.activo === o.activo))) delete _horPending[id];
+}
+
+function marcarActivoHorario(id, activo) {
+  _horPending[id] = _horPending[id] || {};
+  _horPending[id].activo = activo;
+  _limpiarPend(id);
+  renderHorarios(_horData);
+}
+function marcarEliminarHorario(id) {
+  _horPending[id] = _horPending[id] || {};
+  _horPending[id].eliminar = !_horPending[id].eliminar;
+  _limpiarPend(id);
+  renderHorarios(_horData);
+}
+
+async function guardarHorariosMedico(medId) {
+  const cambios = _horData.filter(h => h.id_medico === medId && _horCambiado(h.id));
+  if (!cambios.length) return;
+  try {
+    for (const h of cambios) {
+      const p = _horPending[h.id];
+      if (p.eliminar) { await api('DELETE', `/horarios/${h.id}`); }
+      else if (p.activo !== undefined) { await api('PUT', `/horarios/${h.id}`, { activo: p.activo }); }
+      delete _horPending[h.id];
+    }
+    toast('Cambios guardados');
+    await loadHorarios();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function _chipsJornada(items) {
+  if (!items.length) return '<span class="text-slate-400 text-sm">No disponible</span>';
+  const porRango = new Map();
+  items.forEach(h => {
+    const k = `${h.hora_inicio}–${h.hora_fin}`;
+    if (!porRango.has(k)) porRango.set(k, []);
+    porRango.get(k).push(DIAS_ABBR[h.dia_semana] || h.dia_semana);
+  });
+  return '<div class="hor-chips">' + [...porRango.entries()].map(([r, d]) =>
+    `<span class="hor-chip">${d.join(', ')} · <b>${r}</b></span>`).join('') + '</div>';
+}
+
+// Acordeón: contraído muestra dos columnas (Mañana / Tarde). Al expandir, se ven
+// y editan los horarios; los cambios se aplican con el botón "Guardar".
+function renderHorarios(data) {
+  const porMedico = new Map();
+  data.forEach(h => {
+    if (!porMedico.has(h.id_medico))
+      porMedico.set(h.id_medico, { id: h.id_medico, medico: h.medico, especialidad: h.especialidad || '—', items: [] });
+    porMedico.get(h.id_medico).items.push(h);
+  });
+  const grupos = [...porMedico.values()].sort((a, b) => a.medico.localeCompare(b.medico));
+  if (!grupos.length) {
+    $('hor-acc').innerHTML = '<div class="card p-8 text-center text-slate-400">No hay horarios registrados</div>';
+    return;
+  }
+  $('hor-acc').innerHTML = grupos.map(g => {
+    const abierto = _horExpand.has(g.id);
+    g.items.sort((a, b) => a.dia_semana - b.dia_semana || a.hora_inicio.localeCompare(b.hora_inicio));
+    // Columnas mañana/tarde (excluye los marcados para eliminar)
+    const visibles = g.items.filter(h => !_horEliminar(h.id));
+    const manana = visibles.filter(h => h.hora_inicio < '12:00');
+    const tarde  = visibles.filter(h => h.hora_inicio >= '12:00');
+    const pend = _pendCount(g.id);
+
+    const detalle = g.items.map(h => {
+      const elim = _horEliminar(h.id);
+      const act = _horActivoActual(h);
+      const camb = _horCambiado(h.id);
+      const strike = elim ? 'text-decoration:line-through;' : '';
+      return `
+      <tr style="${camb ? 'background:#fffbeb;' : ''}${elim ? 'opacity:.7;' : ''}">
+        <td style="${strike}">${h.dia} ${camb ? '<span class="text-amber-600 text-xs font-bold" title="cambio sin guardar">●</span>' : ''}</td>
+        <td class="font-mono" style="${strike}">${h.hora_inicio}</td>
+        <td class="font-mono" style="${strike}">${h.hora_fin}</td>
+        <td>${elim ? '<span class="text-xs text-red-600 font-semibold">🗑 a eliminar</span>' : toggle(h.id, act, 'marcarActivoHorario')}</td>
+        <td class="flex gap-1 py-1">
+          <button class="btn btn-sm btn-secondary" ${elim ? 'disabled' : ''} onclick="abrirModalHorario(${h.id},${h.id_medico},'${h.hora_inicio}','${h.hora_fin}',${h.dia_semana},${act})">✏️ Editar</button>
+          ${elim
+            ? `<button class="btn btn-sm btn-warning" onclick="marcarEliminarHorario(${h.id})">↩️ Deshacer</button>`
+            : `<button class="btn btn-sm btn-danger" onclick="marcarEliminarHorario(${h.id})">🗑</button>`}
+        </td>
+      </tr>`;
+    }).join('');
+
+    return `
+    <div class="card mb-3 overflow-hidden">
+      <div class="hor-head" onclick="toggleHorMedico(${g.id})">
+        <div class="flex items-center gap-2 min-w-0" style="flex:0 0 auto;max-width:46%">
+          <span class="hor-caret ${abierto ? 'open' : ''}">▶</span>
+          <span class="font-semibold text-slate-800 truncate">${g.medico}</span>
+          <span class="esp-chip">${g.especialidad}</span>
+          <span class="counter-badge">${g.items.length}</span>
+        </div>
+        <div class="hor-summary ${abierto ? 'is-hidden' : ''}">
+          <div><div class="hor-col-h">☀️ Mañana</div>${_chipsJornada(manana)}</div>
+          <div><div class="hor-col-h">🌙 Tarde</div>${_chipsJornada(tarde)}</div>
+        </div>
+      </div>
+      <div class="hor-detail ${abierto ? '' : 'is-hidden'}">
+        <div class="flex items-center justify-between gap-2 px-4 pt-3 flex-wrap">
+          <span class="text-sm ${pend ? 'text-amber-700 font-semibold' : 'text-slate-500'}">
+            ${pend ? `⚠️ ${pend} cambio(s) sin guardar` : `${g.especialidad} · ${g.items.length} horario(s)`}
+          </span>
+          <div class="flex gap-2">
+            <button class="btn btn-sm" ${pend ? '' : 'disabled'}
+              style="${pend ? 'background:#16a34a;color:#fff;box-shadow:0 0 0 3px rgba(34,197,94,.3)' : 'background:#dcfce7;color:#16a34a'}"
+              onclick="event.stopPropagation();guardarHorariosMedico(${g.id})">💾 Guardar${pend ? ` cambios (${pend})` : ''}</button>
+            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();abrirModalHorario(null,${g.id})">+ Agregar horario</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto px-3 pb-3">
+          <table>
+            <thead><tr><th>Día</th><th>Inicio</th><th>Fin</th><th>Activo</th><th>Acciones</th></tr></thead>
+            <tbody>${detalle}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function abrirModalHorario(id=null,id_med=null,hi='07:00',hf='12:00',dia=1,activo=true) {
+  // Médico fijo (solo lectura) cuando se edita una fila o se agrega desde un
+  // médico concreto. El botón grande (sin id ni id_med) sí permite elegirlo.
+  const medicoFijo = (id !== null) || (id_med !== null);
+  let medicoHtml;
+  if (medicoFijo) {
+    const med = G.medicos.find(m => m.id === id_med);
+    const medNombre = med ? `Dr(a). ${med.nombres} ${med.apellidos} – ${med.especialidad}` : '—';
+    medicoHtml = `<div class="form-group"><label>Médico</label><input type="text" value="${esc(medNombre)}" disabled></div>`;
+  } else {
+    const medOpts = G.medicos.map(m=>`<option value="${m.id}">Dr(a). ${m.nombres} ${m.apellidos} – ${m.especialidad}</option>`).join('');
+    medicoHtml = `<div class="form-group"><label>Médico *</label><select id="h-med"><option value="">Seleccionar…</option>${medOpts}</select></div>`;
+  }
+  const dias=[[1,'Lunes'],[2,'Martes'],[3,'Miércoles'],[4,'Jueves'],[5,'Viernes'],[6,'Sábado'],[7,'Domingo']];
+  const diaOpts=dias.map(([v,l])=>`<option value="${v}" ${v===dia?'selected':''}>${l}</option>`).join('');
+  const html = `
+    ${medicoHtml}
+    <div class="form-group"><label>Día de la semana *</label><select id="h-dia">${diaOpts}</select></div>
+    <div class="grid grid-cols-2 gap-4">
+      <div class="form-group"><label>Hora inicio *</label><input id="h-ini" type="time" value="${hi}"></div>
+      <div class="form-group"><label>Hora fin *</label><input id="h-fin" type="time" value="${hf}"></div>
+    </div>
+    <div class="flex items-center gap-3 mt-1">
+      <label class="toggle"><input id="h-activo" type="checkbox" ${activo?'checked':''}><span class="toggle-track"></span></label>
+      <span class="text-sm text-slate-600">Horario activo</span>
+    </div>`;
+  openModal(id?'Editar Horario':'Agregar Horario', html, async () => {
+    const d=parseInt($('h-dia').value);
+    const ini=$('h-ini').value, fin=$('h-fin').value, act=$('h-activo').checked;
+    if(!ini||!fin) throw new Error('Completa la hora de inicio y fin');
+    if(ini>=fin) throw new Error('La hora inicio debe ser antes que la hora fin');
+    if(id) { await api('PUT',`/horarios/${id}`,{dia_semana:d,hora_inicio:ini,hora_fin:fin,activo:act}); toast('Horario actualizado'); }
+    else {
+      // Médico desde el predeterminado (id_med) o desde el selector del botón grande
+      const idm = (id_med !== null) ? id_med : parseInt($('h-med').value);
+      if(!idm) throw new Error('Selecciona un médico');
+      await api('POST','/horarios',{id_medico:idm,dia_semana:d,hora_inicio:ini,hora_fin:fin,activo:act}); toast('Horario creado');
+    }
+    closeModal(); loadHorarios();
+  });
+}
+
+// ─── Sidebar contraer / expandir ─────────────────────────────────────────────
+
+function _fijarAncho(sb, valor) {
+  ['width', 'min-width', 'max-width'].forEach(p => sb.style.setProperty(p, valor, 'important'));
+}
+
+function _animarAncho(sb, colapsado) {
+  // Tween por requestAnimationFrame (las transiciones CSS de width en un flex
+  // item se atascan). easeOutCubic, ~260 ms.
+  const desde = sb.getBoundingClientRect().width;
+  const hasta = colapsado ? 72 : 224;        // 4.5rem / 14rem en px
+  const dur = 260, t0 = performance.now();
+  if (sb._raf) cancelAnimationFrame(sb._raf);
+  function frame(t) {
+    const p = Math.min(1, (t - t0) / dur);
+    const e = 1 - Math.pow(1 - p, 3);
+    _fijarAncho(sb, (desde + (hasta - desde) * e) + 'px');
+    if (p < 1) sb._raf = requestAnimationFrame(frame);
+    else { _fijarAncho(sb, colapsado ? '4.5rem' : '14rem'); sb._raf = 0; }
+  }
+  sb._raf = requestAnimationFrame(frame);
+}
+
+function _aplicarHamburguesa(colapsado) {
+  // Inline: contraído → ☰ tres rayas; expandido → ✕ X. La transición CSS de los
+  // <span> anima el cambio.
+  const sp = document.querySelectorAll('#side-toggle span');
+  if (sp.length < 3) return;
+  if (colapsado) {                 // ☰
+    sp[0].style.transform = 'none'; sp[1].style.opacity = '1'; sp[2].style.transform = 'none';
+  } else {                         // ✕
+    sp[0].style.transform = 'translateY(8.5px) rotate(45deg)';
+    sp[1].style.opacity = '0';
+    sp[2].style.transform = 'translateY(-8.5px) rotate(-45deg)';
+  }
+}
+
+function toggleSidebar() {
+  const sb = $('sidebar');
+  const colapsar = !sb.classList.contains('collapsed');
+  sb.classList.toggle('collapsed', colapsar);
+  _animarAncho(sb, colapsar);
+  _aplicarHamburguesa(colapsar);
+  try { localStorage.setItem('sidebarCollapsed', colapsar ? '1' : '0'); } catch (e) {}
+}
+
+function restaurarSidebar() {
+  let col = false;
+  try { col = localStorage.getItem('sidebarCollapsed') === '1'; } catch (e) {}
+  const sb = $('sidebar');
+  if (col) sb.classList.add('collapsed');
+  if (col) _fijarAncho(sb, '4.5rem');   // estado inicial sin animar
+  _aplicarHamburguesa(col);
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+
+window.addEventListener('DOMContentLoaded', async () => {
+  // Enlazar el formulario de login (Enter o botón "Ingresar").
+  $('login-form').addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });
+
+  // Verificar sesión: si es válida, cargar el panel; si no, mostrar el login.
+  if (await checkAuth()) {
+    await bootApp();
+  } else {
+    mostrarLogin(true);
+  }
+
+  // Cada 15 s volver a renderizar la tabla de citas (sin llamada a la API)
+  // para que el botón "Marcar asistida" se habilite/deshabilite en tiempo real
+  // conforme avanza el reloj y la ventana de 5 minutos se abre o cierra.
+  setInterval(() => {
+    if (!$('sec-citas').classList.contains('hidden') && tables.citas.raw.length > 0) {
+      redraw('citas');
+    }
+  }, 15000);
+});
+</script>
+</body>
+</html>

@@ -47,12 +47,29 @@ services:
       HOSPITAL_NOMBRE: ${HOSPITAL_NOMBRE}
       HOSPITAL_DIRECCION: ${HOSPITAL_DIRECCION}
       HOSPITAL_TELEFONO: ${HOSPITAL_TELEFONO}
+      # Login del panel administrativo — leídos por bot_config.py
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+      ADMIN_SESSION_HORAS: ${ADMIN_SESSION_HORAS:-8}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Proveedores de IA / OCR
+      AI_PROVIDER: ${AI_PROVIDER:-gemini}
+      GEMINI_AUTH_TOKEN: ${GEMINI_AUTH_TOKEN}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-lite-latest}
+      GROQ_AUTH_TOKEN: ${GROQ_AUTH_TOKEN}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OCR_PROVIDER: ${OCR_PROVIDER:-gemini}
     ports:
+      # 0.0.0.0:8000 → visible desde la LAN. El firewall del host (ufw) debe
+      # restringir el origen a la CIDR de la intranet del hospital.
       - "8000:8000"
     networks:
       - chatbot-network
     volumes:
       - ./logs:/app/logs
+      # Persistencia de documentos subidos por WhatsApp (órdenes/autorizaciones)
+      - ./static/documentos:/app/static/documentos
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

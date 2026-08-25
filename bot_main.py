@@ -153,6 +153,57 @@ async def vigilar_fechas_disponibles():
         await asyncio.sleep(12 * 60 * 60)   # cada 12 horas
 
 # ====================
+# Tarea de fondo: limpieza de documentos huérfanos (fotos/PDF)
+# ====================
+async def vigilar_limpieza_documentos():
+    """
+    Ejecuta la limpieza de archivos de documentos (static/documentos/) según
+    la frecuencia configurada en la tabla `configuracion`:
+        · desactivado → nunca borra nada
+        · diario      → cada 24 h
+        · semanal     → cada 7 días
+        · mensual     → cada 30 días
+    NUNCA borra los documentos de citas 'pendiente' o 'agendada' (ver
+    `limpieza_documentos.py`). El personal puede cambiar la frecuencia o
+    ejecutar una limpieza manual desde el panel > pestaña Sistema.
+    """
+    from datetime import datetime as _dt
+    import limpieza_documentos as _ld
+    INTERVALOS = {"diario": 86_400, "semanal": 604_800, "mensual": 2_592_000}
+    ULT_CHECK_S = 6 * 60 * 60   # revisar cada 6 h si toca ejecutar
+
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                r = db.execute(text(
+                    "SELECT valor FROM configuracion WHERE clave='limpieza_docs_frecuencia'"
+                )).fetchone()
+                frecuencia = (r.valor if r else "semanal").lower()
+                if frecuencia in INTERVALOS:
+                    r2 = db.execute(text(
+                        "SELECT valor FROM configuracion WHERE clave='limpieza_docs_ultima'"
+                    )).fetchone()
+                    ult_iso = (r2.valor if r2 else "") or ""
+                    debe_correr = True
+                    if ult_iso:
+                        try:
+                            elapsed = (_dt.now() - _dt.fromisoformat(ult_iso)).total_seconds()
+                            debe_correr = elapsed >= INTERVALOS[frecuencia]
+                        except ValueError:
+                            debe_correr = True
+                    if debe_correr:
+                        rep = _ld.limpiar_documentos(db)
+                        print(f"🧹 Limpieza de documentos ({frecuencia}): "
+                              f"{rep['borrados']} borrado(s), "
+                              f"{rep['bytes_liberados']} bytes liberados")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"❌ Error en limpieza de documentos: {e}")
+        await asyncio.sleep(ULT_CHECK_S)
+
+# ====================
 # Tarea de fondo: reconectar túnel Ngrok si cae
 # ====================
 async def vigilar_tunel_ngrok():
@@ -273,6 +324,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(vigilar_citas_inasistidas()),
         asyncio.create_task(vigilar_citas_antiguas()),
         asyncio.create_task(vigilar_fechas_disponibles()),
+        asyncio.create_task(vigilar_limpieza_documentos()),
     ]
 
     if settings.NGROK_ENABLED:

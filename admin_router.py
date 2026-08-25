@@ -1534,3 +1534,91 @@ def eliminar_horario(id_horario: int, db: Session = Depends(get_db)):
     db.commit()
     _reset_sequence(db, "horarios_medicos", "id_horario")
     return {"ok": True}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Limpieza de documentos (fotos/PDF de órdenes y autorizaciones)
+# ═════════════════════════════════════════════════════════════════════════════
+
+_FRECUENCIAS_VALIDAS = ("desactivado", "diario", "semanal", "mensual")
+
+def _fmt_bytes(n: int) -> str:
+    """Presenta un tamaño en bytes de forma legible (B / KB / MB / GB)."""
+    for u in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.1f} {u}"
+        n /= 1024
+    return f"{n:.1f} TB"
+
+
+def _leer_config(db: Session, clave: str, default: str = "") -> str:
+    """Lee un valor de la tabla `configuracion` con default seguro."""
+    r = db.execute(text("SELECT valor FROM configuracion WHERE clave = :k"),
+                   {"k": clave}).fetchone()
+    return (r.valor if r and r.valor is not None else default)
+
+
+def _escribir_config(db: Session, clave: str, valor: str) -> None:
+    """Upsert en `configuracion`."""
+    db.execute(text("""
+        INSERT INTO configuracion (clave, valor, updated_at)
+        VALUES (:k, :v, CURRENT_TIMESTAMP)
+        ON CONFLICT (clave) DO UPDATE
+        SET valor = EXCLUDED.valor, updated_at = CURRENT_TIMESTAMP
+    """), {"k": clave, "v": valor})
+
+
+@router.get("/sistema/limpieza-docs")
+def obtener_estado_limpieza_docs(db: Session = Depends(get_db)):
+    """
+    Estado del sistema de limpieza de documentos:
+      · frecuencia configurada
+      · fecha de la última ejecución
+      · estadísticas actuales (cuántos hay, cuántos se borrarían, tamaños)
+    """
+    import limpieza_documentos as _ld
+    estado = _ld.estado_documentos(db)
+    return {
+        "frecuencia": _leer_config(db, "limpieza_docs_frecuencia", "semanal"),
+        "ultima_ejecucion": _leer_config(db, "limpieza_docs_ultima", ""),
+        "total_archivos": estado["total"],
+        "protegidos": estado["protegidos"],
+        "borrable": estado["borrable"],
+        "bytes_total": estado["bytes_total"],
+        "bytes_borrable": estado["bytes_borrable"],
+        "tamano_total": _fmt_bytes(estado["bytes_total"]),
+        "tamano_borrable": _fmt_bytes(estado["bytes_borrable"]),
+    }
+
+
+class FrecuenciaRequest(BaseModel):
+    frecuencia: str
+
+@router.put("/sistema/limpieza-docs")
+def cambiar_frecuencia_limpieza(data: FrecuenciaRequest, db: Session = Depends(get_db)):
+    """Cambia cada cuánto se ejecuta la limpieza automática."""
+    f = (data.frecuencia or "").strip().lower()
+    if f not in _FRECUENCIAS_VALIDAS:
+        raise HTTPException(400, f"Frecuencia inválida. Usa una de: {', '.join(_FRECUENCIAS_VALIDAS)}")
+    _escribir_config(db, "limpieza_docs_frecuencia", f)
+    db.commit()
+    return {"ok": True, "frecuencia": f}
+
+
+@router.post("/sistema/limpieza-docs/ejecutar")
+def ejecutar_limpieza_docs_ahora(db: Session = Depends(get_db)):
+    """
+    Ejecuta la limpieza AHORA (botón manual del panel). Los documentos de
+    citas 'pendiente' y 'agendada' quedan intactos; el resto se elimina.
+    """
+    import limpieza_documentos as _ld
+    r = _ld.limpiar_documentos(db)
+    return {
+        "ok": True,
+        "borrados": r["borrados"],
+        "protegidos": r["protegidos"],
+        "bytes_liberados": r["bytes_liberados"],
+        "espacio_liberado": _fmt_bytes(r["bytes_liberados"]),
+        "ejecutado_en": r["ejecutado_en"],
+        "errores": r["errores"],
+    }

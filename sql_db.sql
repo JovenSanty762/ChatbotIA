@@ -140,6 +140,18 @@ CREATE TABLE IF NOT EXISTS metricas_agendamiento (
     created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Configuración operativa que puede cambiarse en tiempo de ejecución desde
+-- el panel administrativo (sin editar el .env ni reiniciar). Clave/valor.
+CREATE TABLE IF NOT EXISTS configuracion (
+    clave       VARCHAR(80) PRIMARY KEY,
+    valor       TEXT,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO configuracion (clave, valor) VALUES
+    ('limpieza_docs_frecuencia', 'semanal'),   -- desactivado | diario | semanal | mensual
+    ('limpieza_docs_ultima',     '')           -- ISO-8601 de la última ejecución
+ON CONFLICT (clave) DO NOTHING;
+
 -- ############################################################################
 -- 2) ÍNDICES Y UNICIDAD
 -- ############################################################################
