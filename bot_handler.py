@@ -1011,29 +1011,30 @@ class ChatBotHandler:
                 self.guardar_dato_temporal(sesion, "id_especialidad", id_esp)
                 self.guardar_dato_temporal(sesion, "nombre_especialidad", nombre_esp or "")
 
-            # ── Fecha extraída ────────────────────────────────────────────────
+            # ── Datos "pospuestos": fecha / hora / jornada / médico ─────────
+            #
+            # Aunque el paciente los mencione en el mensaje, NO se fijan como
+            # elección final aquí — el hospital exige recibir la orden médica
+            # (y la autorización) ANTES de agendar. Se guardan como temporales
+            # con sufijo `_ia` para que `continuar_tras_documentos` los
+            # aplique automáticamente en cuanto llegue la foto/PDF y así
+            # saltar los pasos que ya se pueden resolver.
             fecha_sugerida = resultado.get("fecha_sugerida")
-            id_fecha_encontrada = None
-
             if fecha_sugerida:
-                for f in fechas_db:
-                    if str(f.fecha) == fecha_sugerida:
-                        id_fecha_encontrada = f.id_fecha
-                        self.guardar_dato_temporal(sesion, "fecha_cita", fecha_sugerida)
-                        break
+                self.guardar_dato_temporal(sesion, "fecha_ia", fecha_sugerida)
 
-            # ── Hora preferida ────────────────────────────────────────────────
             hora_pref = resultado.get("hora_preferida")
             if hora_pref:
                 self.guardar_dato_temporal(sesion, "hora_preferida_ia", hora_pref)
 
-            # ── Jornada (mañana / tarde) ──────────────────────────────────────
             jornada = resultado.get("jornada")
             if jornada in ("manana", "tarde"):
-                self.guardar_dato_temporal(sesion, "turno", jornada)
+                self.guardar_dato_temporal(sesion, "turno_ia", jornada)
 
-            # ── Médico mencionado ─────────────────────────────────────────────
             nombre_medico_ia = resultado.get("nombre_medico")
+            if nombre_medico_ia:
+                self.guardar_dato_temporal(sesion, "nombre_medico_ia",
+                                           nombre_medico_ia)
 
             # ── Confirmación de lo entendido ──────────────────────────────────
             resumen = ia.generar_resumen_extraccion(resultado)
@@ -1063,31 +1064,60 @@ class ChatBotHandler:
     def avanzar_agendamiento_inteligente(
         self, telefono: str, sesion: SesionWhatsApp,
         hora_pref: str = None, nombre_medico: str = None,
+        fecha_pref: str = None, turno_pref: str = None,
     ) -> None:
         """
-        Avanza el agendamiento usando lo que ya se conoce en la sesión y los
-        datos extraídos por la IA. Llega tan lejos como sea posible:
-        - Si falta especialidad/fecha/jornada → muestra esa elección
-          (auto-seleccionando si solo hay una opción).
-        - Si hay jornada y se conoce la hora y/o el médico → resuelve el
-          horario y salta directo al resumen de confirmación.
+        Avanza el agendamiento hasta donde permita la información conocida.
+
+        Los cuatro parámetros son opcionales — si no se pasan, se leen de los
+        temporales `_ia` guardados por `procesar_agendamiento_inteligente`.
+        Así, tras la carga de documentos, `continuar_tras_documentos` puede
+        invocar esta función sin argumentos y todo se aplica solo.
+
+        Orden en el que se consumen:
+            1. Precita (tipo_cita + documentos) → si falta algo, entra al
+               flujo `iniciar_precita` y se conservan los `_ia`.
+            2. Médico: match `nombre_medico_ia` contra los activos de la
+               especialidad → si es único, se fija.
+            3. Fecha: si `fecha_ia` existe y está en las disponibles del
+               médico → se fija; si no, se muestran las fechas.
+            4. Hora: primero se filtra por `turno_ia` (mañana/tarde); si
+               `hora_preferida_ia` cae dentro de las libres, se fija; si
+               tras el filtro por turno queda una única opción, se toma.
+            5. Con médico + fecha + hora → salto directo al resumen.
         """
+        # ── 0. Reconstruir preferencias desde temporales _ia ────────────────
+        hora_pref     = hora_pref     or self.obtener_dato_temporal(sesion, 'hora_preferida_ia')
+        nombre_medico = nombre_medico or self.obtener_dato_temporal(sesion, 'nombre_medico_ia')
+        fecha_pref    = fecha_pref    or self.obtener_dato_temporal(sesion, 'fecha_ia')
+        turno_pref    = turno_pref    or self.obtener_dato_temporal(sesion, 'turno_ia')
+
+        # ── 1. Especialidad ────────────────────────────────────────────────
         id_esp = self.obtener_dato_temporal(sesion, 'id_especialidad')
         if not id_esp:
             self.estado_mostrar_especialidades(telefono, sesion, "cita")
             return
 
-        # Exigir tipo de cita + documentos antes de agendar. Se guardan los datos
-        # que ya extrajo la IA (hora/médico) para retomarlos tras los documentos.
+        # ── 2. Precita (tipo_cita + documentos): tope máximo del texto ─────
+        # Antes de pedir médico/fecha/hora el hospital exige la orden médica
+        # (y la autorización de EPS que lo requiera). Se guarda origen='ia'
+        # para que `continuar_tras_documentos` reanude aquí tras las fotos.
         if not self._precita_completa(sesion):
             self.guardar_dato_temporal(sesion, 'origen_flujo', 'ia')
-            self.guardar_dato_temporal(sesion, 'hora_preferida_ia', hora_pref)
-            self.guardar_dato_temporal(sesion, 'nombre_medico_ia', nombre_medico)
+            # Los temporales _ia ya están guardados por procesar_agendamiento_
+            # inteligente; si el llamador nos pasó valores nuevos, los sobrescribe.
+            if hora_pref:
+                self.guardar_dato_temporal(sesion, 'hora_preferida_ia', hora_pref)
+            if nombre_medico:
+                self.guardar_dato_temporal(sesion, 'nombre_medico_ia', nombre_medico)
+            if fecha_pref:
+                self.guardar_dato_temporal(sesion, 'fecha_ia', fecha_pref)
+            if turno_pref:
+                self.guardar_dato_temporal(sesion, 'turno_ia', turno_pref)
             self.iniciar_precita(telefono, sesion)
             return
 
-        # Si la IA indicó un médico y coincide con alguno activo de la
-        # especialidad, fijarlo antes de continuar (nuevo flujo pide médico primero).
+        # ── 3. Médico: aplicar preferencia _ia si coincide inequívocamente ─
         if not self.obtener_dato_temporal(sesion, 'id_medico') and nombre_medico:
             candidatos = self._medicos_de_especialidad(sesion)
             elegido = self._match_medico_por_nombre(candidatos, nombre_medico)
@@ -1100,14 +1130,21 @@ class ChatBotHandler:
             self.mostrar_medicos_especialidad(telefono, sesion)
             return
 
+        # ── 4. Fecha: preferir la ya elegida; si no, aplicar `fecha_ia` ────
         fecha_str = self.obtener_dato_temporal(sesion, 'fecha_cita')
+        if not fecha_str and fecha_pref:
+            if self._fecha_disponible_para_medico(
+                self.obtener_dato_temporal(sesion, 'id_medico'), fecha_pref
+            ):
+                self.guardar_dato_temporal(sesion, 'fecha_cita', fecha_pref)
+                fecha_str = fecha_pref
+
         if not fecha_str:
             self.mostrar_fechas_disponibles(telefono, sesion)
             return
         fecha = date.fromisoformat(fecha_str)
 
-        # Con médico + fecha conocidos: si la IA indicó hora y está libre, fijarla
-        # y saltar al resumen; si no, mostrar la lista de horas del médico.
+        # ── 5. Hora: filtrar por `turno_ia`, aplicar `hora_preferida_ia` ───
         id_medico = self.obtener_dato_temporal(sesion, 'id_medico')
         opciones = self._opciones_horario_medico(id_medico, fecha)
         if not opciones:
@@ -1116,6 +1153,20 @@ class ChatBotHandler:
             )
             self.mostrar_fechas_disponibles(telefono, sesion)
             return
+
+        # Filtrar por turno si el paciente lo indicó (manana < 12:00 <= tarde).
+        if turno_pref in ("manana", "tarde"):
+            opciones_turno = [
+                op for op in opciones
+                if (turno_pref == "manana"
+                    and datetime.strptime(op['h'], '%H:%M').time() < time(12, 0))
+                or (turno_pref == "tarde"
+                    and datetime.strptime(op['h'], '%H:%M').time() >= time(12, 0))
+            ]
+            # Solo se aplica el filtro si deja al menos 1 opción; si el turno
+            # elegido no tiene cupos, no se descarta el médico — se muestra todo.
+            if opciones_turno:
+                opciones = opciones_turno
 
         seleccion = None
         if hora_pref:
@@ -1130,6 +1181,26 @@ class ChatBotHandler:
             self._fijar_opcion_y_confirmar(telefono, sesion, seleccion)
         else:
             self.mostrar_horarios_medico(telefono, sesion)
+
+    # ── Helper: ¿la fecha ISO está entre las disponibles del médico? ─────────
+    def _fecha_disponible_para_medico(self, id_medico: int, fecha_iso: str) -> bool:
+        """
+        True si `fecha_iso` está entre las fechas disponibles del médico
+        (usa `_opciones_horario_medico`, que ya filtra por horario activo y
+        slots libres). Robusto contra fechas mal formateadas.
+        """
+        if not id_medico or not fecha_iso:
+            return False
+        try:
+            f = date.fromisoformat(fecha_iso)
+        except (ValueError, TypeError):
+            return False
+        if f < date.today():
+            return False
+        try:
+            return bool(self._opciones_horario_medico(id_medico, f))
+        except Exception:
+            return False
 
     def _match_medico_por_nombre(
         self, candidatos: List['Medico'], nombre_medico: str
@@ -2009,11 +2080,12 @@ class ChatBotHandler:
 
         origen = self.obtener_dato_temporal(sesion, 'origen_flujo') or 'manual'
         if origen == 'ia':
-            self.avanzar_agendamiento_inteligente(
-                telefono, sesion,
-                hora_pref=self.obtener_dato_temporal(sesion, 'hora_preferida_ia'),
-                nombre_medico=self.obtener_dato_temporal(sesion, 'nombre_medico_ia'),
-            )
+            # `avanzar_agendamiento_inteligente` lee por sí mismo TODOS los
+            # temporales `_ia` (medico/fecha/hora/turno) que se guardaron al
+            # interpretar el texto libre, así que no hay que pasarlos aquí.
+            # Con la orden médica ya recibida saltará al paso más avanzado que
+            # esos datos permitan alcanzar (médico → fecha → hora → resumen).
+            self.avanzar_agendamiento_inteligente(telefono, sesion)
         else:
             self.mostrar_medicos_especialidad(telefono, sesion)
 
